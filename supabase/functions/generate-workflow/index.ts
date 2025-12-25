@@ -53,8 +53,15 @@ function createEdge(
   };
 }
 
-// Simplified system prompt focused on workflow planning
-const LANGFLOW_SYSTEM_PROMPT = `You are a Langflow workflow planner. Given a user's description, you will output a JSON plan for a workflow.
+// Generate random code hash
+function generateCodeHash(): string {
+  return Array.from({ length: 12 }, () => 
+    '0123456789abcdef'[Math.floor(Math.random() * 16)]
+  ).join('');
+}
+
+// System prompt for Claude to generate workflow plans
+const LANGFLOW_SYSTEM_PROMPT = `You are a Langflow workflow planner. Given a user's description, output a JSON plan for a workflow.
 
 IMPORTANT: Output ONLY valid JSON with this exact structure:
 {
@@ -62,529 +69,925 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
   "description": "Brief description",
   "components": [
     {
-      "type": "ChatInput" | "ChatOutput" | "Agent" | "Prompt" | "LanguageModel" | "SearchAPI" | "Calculator" | "URL" | "TavilySearch" | "TextInput",
+      "type": "ChatInput" | "ChatOutput" | "Prompt" | "OpenAIModel" | "TextInput",
       "id_suffix": "unique_5char",
-      "config": {
-        // Component-specific configuration
-      }
+      "display_name": "Optional custom display name",
+      "config": { /* component-specific config */ }
     }
   ],
   "connections": [
     {
       "from": "ComponentType-suffix",
       "from_output": "output_name",
-      "to": "ComponentType-suffix",
+      "to": "ComponentType-suffix", 
       "to_input": "input_field_name"
     }
   ]
 }
 
-## Available Components
+## Available Components & Their Outputs/Inputs
 
 ### ChatInput
+- Type: "ChatInput"
 - Output: "message" → ["Message"]
-- Config: { "input_value": "default text" }
+- Use for: Getting user input from playground
 
 ### ChatOutput  
-- Input: "input_value" ← ["Data", "DataFrame", "Message"]
-- Output: "message" → ["Message"]
+- Type: "ChatOutput"
+- Input: "input_value" ← ["Message"]
+- Use for: Displaying AI response to user
 
-### Agent
-- Inputs: 
-  - "input_value" ← ["Message"]
-  - "tools" ← ["Tool"] (can have multiple tool connections)
-- Output: "response" → ["Message"]
-- Config: { "system_prompt": "Agent instructions", "model_name": "gpt-4o-mini" }
+### TextInput
+- Type: "TextInput"
+- Output: "text" → ["Message"]
+- Config: { "input_value": "default text" }
+- Use for: Static text inputs, instructions, etc.
 
 ### Prompt
+- Type: "Prompt"
 - Output: "prompt" → ["Message"]
-- Config: { "template": "Template text with {variables}", "variables": {"var1": "value1"} }
+- Config: { "template": "Template with {variable1} and {variable2}" }
+- Use for: Creating prompt templates with variables
+- Variables in {braces} become input ports
 
-### LanguageModel (LanguageModelComponent)
-- Inputs:
-  - "input_value" ← ["Message"]  
-  - "system_message" ← ["Message"]
+### OpenAIModel
+- Type: "OpenAIModel"
+- Inputs: 
+  - "input_value" ← ["Message"] (the prompt/message to process)
+  - "system_message" ← ["Message"] (optional system prompt)
 - Output: "text_output" → ["Message"]
-- Config: { "provider": "OpenAI", "model_name": "gpt-4o-mini" }
-
-### SearchAPI (SearchComponent)
-- Output: "component_as_tool" → ["Tool"]
-- Config: { "engine": "google" | "bing" | "duckduckgo" }
-
-### Calculator (CalculatorComponent)
-- Output: "component_as_tool" → ["Tool"]
-
-### URL
-- Output: "component_as_tool" → ["Tool"]
-- Config: { "urls": ["https://example.com"] }
-
-### TavilySearch (TavilySearchComponent)
-- Output: "component_as_tool" → ["Tool"]
-- Config: { "max_results": 5 }
+- Config: { "model_name": "gpt-4o-mini", "temperature": 0.1 }
+- Use for: LLM processing
 
 ## Connection Rules
 
-1. ChatInput.message → Agent.input_value OR Prompt variables OR LanguageModel.input_value
-2. Agent.response → ChatOutput.input_value OR another Agent.input_value  
-3. Tool components (SearchAPI, Calculator, URL, TavilySearch) → Agent.tools
-4. Prompt.prompt → LanguageModel.input_value OR LanguageModel.system_message
-5. LanguageModel.text_output → ChatOutput.input_value
+1. ChatInput.message → OpenAIModel.input_value (direct chat)
+2. ChatInput.message → Prompt (as variable input)
+3. TextInput.text → Prompt (as variable input) 
+4. Prompt.prompt → OpenAIModel.input_value
+5. OpenAIModel.text_output → ChatOutput.input_value
 
-## Common Workflow Patterns
+## Common Patterns
 
-### Simple Chatbot (3 components)
-ChatInput → LanguageModel → ChatOutput
-
-### Agent with Search (4 components)
-ChatInput → Agent ← SearchAPI
-Agent → ChatOutput
-
-### Multi-Agent Chain
-ChatInput → Agent1 → Agent2 → Agent3 → ChatOutput
-(each agent can have tools connected)
+### Simple Chatbot
+ChatInput → OpenAIModel → ChatOutput
+connections: [
+  { from: "ChatInput-xxx", from_output: "message", to: "OpenAIModel-yyy", to_input: "input_value" },
+  { from: "OpenAIModel-yyy", from_output: "text_output", to: "ChatOutput-zzz", to_input: "input_value" }
+]
 
 ### Prompt-based Generation
-ChatInput → Prompt → LanguageModel → ChatOutput
+TextInput (instructions) → Prompt ← ChatInput (topic)
+Prompt → OpenAIModel → ChatOutput
+connections: [
+  { from: "TextInput-aaa", from_output: "text", to: "Prompt-bbb", to_input: "instructions" },
+  { from: "ChatInput-ccc", from_output: "message", to: "Prompt-bbb", to_input: "topic" },
+  { from: "Prompt-bbb", from_output: "prompt", to: "OpenAIModel-ddd", to_input: "input_value" },
+  { from: "OpenAIModel-ddd", from_output: "text_output", to: "ChatOutput-eee", to_input: "input_value" }
+]
 
-## Example Output
+For Prompt variables: the variable names in {braces} in the template become the to_input names for connections.
 
-For "Build a chatbot that searches the web":
+## Example
+
+User: "Create a blog writer chatbot"
 {
-  "name": "Web Search Chatbot",
-  "description": "A chatbot that searches the web and provides answers",
+  "name": "Blog Writer",
+  "description": "A chatbot that writes blog posts based on user topics",
   "components": [
-    { "type": "ChatInput", "id_suffix": "abc12", "config": {} },
-    { "type": "SearchAPI", "id_suffix": "def34", "config": { "engine": "google" } },
-    { "type": "Agent", "id_suffix": "ghi56", "config": { "system_prompt": "You are a helpful assistant that searches the web to answer questions.", "model_name": "gpt-4o-mini" } },
-    { "type": "ChatOutput", "id_suffix": "jkl78", "config": {} }
+    { "type": "ChatInput", "id_suffix": "inp01", "display_name": "User Topic" },
+    { "type": "TextInput", "id_suffix": "txt02", "display_name": "Writing Instructions", "config": { "input_value": "Write a detailed, engaging blog post with introduction, main points, and conclusion." } },
+    { "type": "Prompt", "id_suffix": "pmt03", "config": { "template": "Instructions: {instructions}\\n\\nTopic: {topic}\\n\\nWrite the blog post:" } },
+    { "type": "OpenAIModel", "id_suffix": "llm04", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out05", "display_name": "Blog Output" }
   ],
   "connections": [
-    { "from": "ChatInput-abc12", "from_output": "message", "to": "Agent-ghi56", "to_input": "input_value" },
-    { "from": "SearchAPI-def34", "from_output": "component_as_tool", "to": "Agent-ghi56", "to_input": "tools" },
-    { "from": "Agent-ghi56", "from_output": "response", "to": "ChatOutput-jkl78", "to_input": "input_value" }
+    { "from": "TextInput-txt02", "from_output": "text", "to": "Prompt-pmt03", "to_input": "instructions" },
+    { "from": "ChatInput-inp01", "from_output": "message", "to": "Prompt-pmt03", "to_input": "topic" },
+    { "from": "Prompt-pmt03", "from_output": "prompt", "to": "OpenAIModel-llm04", "to_input": "input_value" },
+    { "from": "OpenAIModel-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
   ]
 }
 
 RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
 
-// Component templates (simplified but valid structures)
-const COMPONENT_TEMPLATES: Record<string, any> = {
-  ChatInput: {
+// Full component templates matching Langflow's actual format
+function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input") {
+  return {
     base_classes: ["Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
     description: "Get chat inputs from the Playground.",
-    display_name: "Chat Input",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "files"],
+    frozen: false,
     icon: "MessagesSquare",
-    lf_version: "1.2.0",
+    legacy: false,
+    lf_version: "1.4.2",
+    metadata: {
+      code_hash: generateCodeHash(),
+      module: "langflow.components.inputs.ChatInput"
+    },
+    output_types: [],
     outputs: [{
+      allows_loop: false,
       cache: true,
-      display_name: "Chat Message",
+      display_name: "Message",
+      group_outputs: false,
       method: "message_response",
       name: "message",
       selected: "Message",
+      tool_mode: true,
       types: ["Message"],
       value: "__UNDEFINED__"
     }],
+    pinned: false,
     template: {
       _type: "Component",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: "from langflow.base.io.chat import ChatComponent\nfrom langflow.io import DropdownInput, MessageTextInput, Output\nfrom langflow.schema.message import Message\n\nclass ChatInput(ChatComponent):\n    display_name = \"Chat Input\"\n    description = \"Get chat inputs from the Playground.\"\n    icon = \"MessagesSquare\"\n    name = \"ChatInput\"\n\n    inputs = [\n        MessageTextInput(name=\"input_value\", display_name=\"Text\", info=\"Message text.\"),\n        DropdownInput(name=\"sender\", display_name=\"Sender Type\", options=[\"Machine\", \"User\"], value=\"User\"),\n        MessageTextInput(name=\"sender_name\", display_name=\"Sender Name\", value=\"User\"),\n    ]\n    outputs = [Output(display_name=\"Message\", name=\"message\", method=\"message_response\")]\n\n    def message_response(self) -> Message:\n        return Message(text=self.input_value, sender=self.sender, sender_name=self.sender_name)"
+      },
+      files: {
+        advanced: true,
+        display_name: "Files",
+        dynamic: false,
+        fileTypes: ["txt", "md", "mdx", "csv", "json", "yaml", "yml", "xml", "html", "pdf", "docx", "py", "sh", "sql", "js", "ts", "tsx"],
+        file_path: "",
+        info: "Files to be sent with the message.",
+        list: true,
+        load_from_db: false,
+        name: "files",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        type: "file",
+        value: ""
+      },
       input_value: {
-        _input_type: "MultilineInput",
-        display_name: "Input Text",
+        advanced: false,
+        display_name: "Text",
+        dynamic: false,
+        info: "Message to be passed as input.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "input_value",
+        placeholder: "Type something...",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: ""
       },
       sender: {
-        _input_type: "DropdownInput",
+        advanced: true,
         display_name: "Sender Type",
+        dynamic: false,
+        info: "Type of sender.",
+        name: "sender",
         options: ["Machine", "User"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
         type: "str",
         value: "User"
       },
       sender_name: {
-        _input_type: "MessageTextInput",
+        advanced: true,
         display_name: "Sender Name",
+        dynamic: false,
+        info: "Name of the sender.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "sender_name",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: "User"
+      },
+      session_id: {
+        advanced: true,
+        display_name: "Session ID",
+        dynamic: false,
+        info: "The session ID of the chat.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "session_id",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      should_store_message: {
+        advanced: true,
+        display_name: "Store Messages",
+        dynamic: false,
+        info: "Store the message in the history.",
+        list: false,
+        name: "should_store_message",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
       }
     }
-  },
-  
-  ChatOutput: {
+  };
+}
+
+function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Output") {
+  return {
     base_classes: ["Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
     description: "Display a chat message in the Playground.",
-    display_name: "Chat Output",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "data_template"],
+    frozen: false,
     icon: "MessagesSquare",
-    lf_version: "1.2.0",
+    legacy: false,
+    lf_version: "1.4.2",
+    metadata: {
+      code_hash: generateCodeHash(),
+      module: "langflow.components.outputs.ChatOutput"
+    },
+    output_types: [],
     outputs: [{
+      allows_loop: false,
       cache: true,
-      display_name: "Output Message",
+      display_name: "Message",
+      group_outputs: false,
       method: "message_response",
       name: "message",
       selected: "Message",
+      tool_mode: true,
       types: ["Message"],
       value: "__UNDEFINED__"
     }],
+    pinned: false,
     template: {
       _type: "Component",
-      input_value: {
-        _input_type: "MessageInput",
-        display_name: "Inputs",
-        input_types: ["Data", "DataFrame", "Message"],
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
         required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: "from langflow.base.io.chat import ChatComponent\nfrom langflow.io import DropdownInput, MessageTextInput, HandleInput, Output\nfrom langflow.schema.message import Message\n\nclass ChatOutput(ChatComponent):\n    display_name = \"Chat Output\"\n    description = \"Display a chat message in the Playground.\"\n    icon = \"MessagesSquare\"\n    name = \"ChatOutput\"\n\n    inputs = [\n        HandleInput(name=\"input_value\", display_name=\"Text\", input_types=[\"Message\"], required=True),\n        DropdownInput(name=\"sender\", display_name=\"Sender Type\", options=[\"Machine\", \"User\"], value=\"Machine\"),\n        MessageTextInput(name=\"sender_name\", display_name=\"Sender Name\", value=\"AI\"),\n    ]\n    outputs = [Output(display_name=\"Message\", name=\"message\", method=\"message_response\")]\n\n    def message_response(self) -> Message:\n        return Message(text=self.input_value.text if hasattr(self.input_value, 'text') else str(self.input_value))"
+      },
+      data_template: {
+        advanced: true,
+        display_name: "Data Template",
+        dynamic: false,
+        info: "Template to convert Data to Text.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "data_template",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: "{text}"
+      },
+      input_value: {
+        advanced: false,
+        display_name: "Text",
+        dynamic: false,
+        info: "Message to be passed as output.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "input_value",
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: ""
       },
       sender: {
-        _input_type: "DropdownInput",
+        advanced: true,
         display_name: "Sender Type",
+        dynamic: false,
+        info: "Type of sender.",
+        name: "sender",
         options: ["Machine", "User"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
         type: "str",
         value: "Machine"
       },
       sender_name: {
-        _input_type: "MessageTextInput",
+        advanced: true,
         display_name: "Sender Name",
+        dynamic: false,
+        info: "Name of the sender.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "sender_name",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: "AI"
-      }
-    }
-  },
-  
-  Agent: {
-    base_classes: ["Message"],
-    description: "Define an AI agent with tools and instructions.",
-    display_name: "Agent",
-    icon: "bot",
-    lf_version: "1.2.0",
-    outputs: [{
-      cache: true,
-      display_name: "Response",
-      method: "run_agent",
-      name: "response",
-      selected: "Message",
-      types: ["Message"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      input_value: {
-        _input_type: "MessageInput",
-        display_name: "Input",
+      },
+      session_id: {
+        advanced: true,
+        display_name: "Session ID",
+        dynamic: false,
+        info: "The session ID of the chat.",
         input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "session_id",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: ""
       },
-      system_prompt: {
-        _input_type: "MultilineInput",
-        display_name: "Agent Instructions",
-        type: "str",
-        value: "You are a helpful assistant."
-      },
-      tools: {
-        _input_type: "HandleInput",
-        display_name: "Tools",
-        input_types: ["Tool"],
-        is_list: true,
-        type: "other",
-        value: []
-      },
-      model_name: {
-        _input_type: "DropdownInput",
-        display_name: "Model Name",
-        options: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
-        type: "str",
-        value: "gpt-4o-mini"
-      },
-      api_key: {
-        _input_type: "SecretStrInput",
-        display_name: "OpenAI API Key",
-        password: true,
-        type: "str",
-        value: ""
+      should_store_message: {
+        advanced: true,
+        display_name: "Store Messages",
+        dynamic: false,
+        info: "Store the message in the history.",
+        list: false,
+        name: "should_store_message",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
       }
     }
-  },
-  
-  SearchComponent: {
-    base_classes: ["Data", "DataFrame", "Message"],
-    description: "Call the SearchApi API with result limiting",
-    display_name: "Search API",
-    icon: "SearchAPI",
-    lf_version: "1.2.0",
+  };
+}
+
+function getTextInputTemplate(nodeId: string, displayName: string = "Text Input", inputValue: string = "") {
+  return {
+    base_classes: ["Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Get text inputs from the Playground.",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["input_value"],
+    frozen: false,
+    icon: "type",
+    legacy: false,
+    lf_version: "1.4.2",
+    metadata: {
+      code_hash: generateCodeHash(),
+      module: "langflow.components.inputs.TextInputComponent"
+    },
+    output_types: [],
     outputs: [{
-      cache: true,
-      display_name: "Toolset",
-      method: "to_toolkit",
-      name: "component_as_tool",
-      selected: "Tool",
-      tool_mode: true,
-      types: ["Tool"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      engine: {
-        _input_type: "DropdownInput",
-        display_name: "Engine",
-        options: ["google", "bing", "duckduckgo"],
-        type: "str",
-        value: "google"
-      },
-      api_key: {
-        _input_type: "SecretStrInput",
-        display_name: "SearchAPI API Key",
-        password: true,
-        required: true,
-        type: "str",
-        value: ""
-      },
-      input_value: {
-        _input_type: "MultilineInput",
-        display_name: "Input",
-        tool_mode: true,
-        type: "str",
-        value: ""
-      },
-      max_results: {
-        _input_type: "IntInput",
-        display_name: "Max Results",
-        type: "int",
-        value: 5
-      }
-    }
-  },
-  
-  CalculatorComponent: {
-    base_classes: ["Data"],
-    description: "Perform basic arithmetic operations on a given expression.",
-    display_name: "Calculator",
-    icon: "calculator",
-    lf_version: "1.2.0",
-    outputs: [{
-      cache: true,
-      display_name: "Toolset",
-      method: "to_toolkit",
-      name: "component_as_tool",
-      selected: "Tool",
-      tool_mode: true,
-      types: ["Tool"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      expression: {
-        _input_type: "MessageTextInput",
-        display_name: "Expression",
-        tool_mode: true,
-        type: "str",
-        value: ""
-      }
-    }
-  },
-  
-  URL: {
-    base_classes: ["Data", "DataFrame", "Message"],
-    description: "Load and retrieve data from specified URLs.",
-    display_name: "URL",
-    icon: "layout-template",
-    lf_version: "1.2.0",
-    outputs: [{
-      cache: true,
-      display_name: "Toolset",
-      method: "to_toolkit",
-      name: "component_as_tool",
-      selected: "Tool",
-      tool_mode: true,
-      types: ["Tool"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      urls: {
-        _input_type: "MessageTextInput",
-        display_name: "URLs",
-        is_list: true,
-        tool_mode: true,
-        type: "str",
-        value: ""
-      }
-    }
-  },
-  
-  LanguageModelComponent: {
-    base_classes: ["LanguageModel", "Message"],
-    description: "Creates a language model from one of the available providers.",
-    display_name: "Language Model",
-    icon: "brain",
-    lf_version: "1.2.0",
-    outputs: [{
+      allows_loop: false,
       cache: true,
       display_name: "Text",
+      group_outputs: false,
       method: "text_response",
-      name: "text_output",
+      name: "text",
       selected: "Message",
+      tool_mode: true,
       types: ["Message"],
       value: "__UNDEFINED__"
-    }, {
-      cache: true,
-      display_name: "Language Model",
-      method: "build_model",
-      name: "model_output",
-      selected: "LanguageModel",
-      types: ["LanguageModel"],
-      value: "__UNDEFINED__"
     }],
+    pinned: false,
     template: {
       _type: "Component",
-      provider: {
-        _input_type: "DropdownInput",
-        display_name: "Provider",
-        options: ["OpenAI", "Anthropic", "Google Generative AI"],
-        type: "str",
-        value: "OpenAI"
-      },
-      model_name: {
-        _input_type: "DropdownInput",
-        display_name: "Model Name",
-        type: "str",
-        value: "gpt-4o-mini"
-      },
-      api_key: {
-        _input_type: "SecretStrInput",
-        display_name: "API Key",
-        password: true,
-        type: "str",
-        value: ""
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: "from langflow.base.io.text import TextComponent\nfrom langflow.io import MultilineInput, Output\nfrom langflow.schema.message import Message\n\nclass TextInputComponent(TextComponent):\n    display_name = \"Text Input\"\n    description = \"Get text inputs from the Playground.\"\n    icon = \"type\"\n    name = \"TextInput\"\n\n    inputs = [MultilineInput(name=\"input_value\", display_name=\"Text\", info=\"Text to be passed as input.\")]\n    outputs = [Output(display_name=\"Text\", name=\"text\", method=\"text_response\")]\n\n    def text_response(self) -> Message:\n        return Message(text=self.input_value)"
       },
       input_value: {
-        _input_type: "MessageInput",
-        display_name: "Input",
+        _input_type: "MultilineInput",
+        advanced: false,
+        display_name: "Text",
+        dynamic: false,
+        info: "Text to be passed as input.",
         input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "input_value",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: inputValue
+      }
+    }
+  };
+}
+
+function getPromptTemplate(nodeId: string, displayName: string = "Prompt", template: string = "") {
+  // Extract variables from template (e.g., {topic} -> topic)
+  const variableRegex = /\{(\w+)\}/g;
+  const variables: string[] = [];
+  let match;
+  while ((match = variableRegex.exec(template)) !== null) {
+    if (!variables.includes(match[1])) {
+      variables.push(match[1]);
+    }
+  }
+
+  const templateObj: any = {
+    _type: "Component",
+    code: {
+      advanced: true,
+      dynamic: true,
+      fileTypes: [],
+      file_path: "",
+      info: "",
+      list: false,
+      load_from_db: false,
+      multiline: true,
+      name: "code",
+      password: false,
+      placeholder: "",
+      required: true,
+      show: true,
+      title_case: false,
+      type: "code",
+      value: "from langflow.base.prompts.api_utils import process_prompt_template\nfrom langflow.custom.custom_component.component import Component\nfrom langflow.inputs.inputs import DefaultPromptField\nfrom langflow.io import MessageTextInput, Output, PromptInput\nfrom langflow.schema.message import Message\n\nclass PromptComponent(Component):\n    display_name = \"Prompt\"\n    description = \"Create a prompt template with dynamic variables.\"\n    icon = \"braces\"\n    name = \"Prompt\"\n\n    inputs = [PromptInput(name=\"template\", display_name=\"Template\")]\n    outputs = [Output(display_name=\"Prompt\", name=\"prompt\", method=\"build_prompt\")]\n\n    async def build_prompt(self) -> Message:\n        prompt = Message.from_template(**self._attributes)\n        self.status = prompt.text\n        return prompt"
+    },
+    template: {
+      advanced: false,
+      display_name: "Template",
+      dynamic: false,
+      info: "",
+      list: false,
+      load_from_db: false,
+      name: "template",
+      placeholder: "",
+      required: false,
+      show: true,
+      title_case: false,
+      trace_as_input: true,
+      type: "prompt",
+      value: template
+    },
+    tool_placeholder: {
+      _input_type: "MessageTextInput",
+      advanced: true,
+      display_name: "Tool Placeholder",
+      dynamic: false,
+      info: "A placeholder input for tool mode.",
+      input_types: ["Message"],
+      list: false,
+      load_from_db: false,
+      name: "tool_placeholder",
+      placeholder: "",
+      required: false,
+      show: true,
+      title_case: false,
+      tool_mode: true,
+      trace_as_input: true,
+      trace_as_metadata: true,
+      type: "str",
+      value: ""
+    }
+  };
+
+  // Add variable fields
+  for (const varName of variables) {
+    templateObj[varName] = {
+      advanced: false,
+      display_name: varName,
+      dynamic: false,
+      field_type: "str",
+      fileTypes: [],
+      file_path: "",
+      info: "",
+      input_types: ["Message", "Text"],
+      list: false,
+      load_from_db: false,
+      multiline: true,
+      name: varName,
+      password: false,
+      placeholder: "",
+      required: false,
+      show: true,
+      title_case: false,
+      type: "str",
+      value: ""
+    };
+  }
+
+  return {
+    base_classes: ["Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {
+      template: variables
+    },
+    description: "Create a prompt template with dynamic variables.",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["template"],
+    frozen: false,
+    icon: "braces",
+    legacy: false,
+    lf_version: "1.4.2",
+    metadata: {
+      code_hash: generateCodeHash(),
+      module: "langflow.components.prompts.PromptComponent"
+    },
+    output_types: [],
+    outputs: [{
+      allows_loop: false,
+      cache: true,
+      display_name: "Prompt Message",
+      group_outputs: false,
+      method: "build_prompt",
+      name: "prompt",
+      selected: "Message",
+      tool_mode: true,
+      types: ["Message"],
+      value: "__UNDEFINED__"
+    }],
+    pinned: false,
+    template: templateObj
+  };
+}
+
+function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", modelName: string = "gpt-4o-mini", temperature: number = 0.1) {
+  return {
+    base_classes: ["LanguageModel", "Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Generates text using OpenAI LLMs.",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["input_value", "system_message", "stream", "max_tokens", "model_kwargs", "json_mode", "output_schema", "model_name", "openai_api_base", "api_key", "temperature", "seed"],
+    frozen: false,
+    icon: "OpenAI",
+    legacy: false,
+    lf_version: "1.4.2",
+    metadata: {
+      code_hash: generateCodeHash(),
+      module: "langflow.components.models.OpenAIModel"
+    },
+    output_types: [],
+    outputs: [
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Text",
+        group_outputs: false,
+        method: "text_response",
+        name: "text_output",
+        selected: "Message",
+        tool_mode: true,
+        types: ["Message"],
+        value: "__UNDEFINED__"
+      },
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Language Model",
+        group_outputs: false,
+        method: "build_model",
+        name: "model_output",
+        selected: "LanguageModel",
+        types: ["LanguageModel"],
+        value: "__UNDEFINED__"
+      }
+    ],
+    pinned: false,
+    template: {
+      _type: "Component",
+      api_key: {
+        advanced: false,
+        display_name: "OpenAI API Key",
+        dynamic: false,
+        info: "The OpenAI API Key.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: true,
+        name: "api_key",
+        password: true,
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
         type: "str",
         value: ""
       },
-      system_message: {
-        _input_type: "MessageInput",
-        display_name: "System Message",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: "from langflow.base.models.model import LCModelComponent\nfrom langflow.field_typing import LanguageModel\nfrom langflow.inputs import MessageInput, SecretStrInput, FloatInput, StrInput, DropdownInput\nfrom langflow.io import Output\nfrom langflow.schema.message import Message\n\nclass OpenAIModelComponent(LCModelComponent):\n    display_name = \"OpenAI\"\n    description = \"Generates text using OpenAI LLMs.\"\n    icon = \"OpenAI\"\n    name = \"OpenAIModel\"\n\n    inputs = [\n        MessageInput(name=\"input_value\", display_name=\"Input\"),\n        MessageInput(name=\"system_message\", display_name=\"System Message\", advanced=True),\n        DropdownInput(name=\"model_name\", display_name=\"Model Name\", options=[\"gpt-4o-mini\", \"gpt-4o\", \"gpt-4-turbo\", \"gpt-3.5-turbo\"], value=\"gpt-4o-mini\"),\n        SecretStrInput(name=\"api_key\", display_name=\"OpenAI API Key\"),\n        FloatInput(name=\"temperature\", display_name=\"Temperature\", value=0.1),\n    ]\n    outputs = [\n        Output(display_name=\"Text\", name=\"text_output\", method=\"text_response\"),\n        Output(display_name=\"Language Model\", name=\"model_output\", method=\"build_model\"),\n    ]"
+      },
+      input_value: {
+        advanced: false,
+        display_name: "Input",
+        dynamic: false,
+        info: "The input to the model.",
         input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "input_value",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      json_mode: {
+        advanced: true,
+        display_name: "JSON Mode",
+        dynamic: false,
+        info: "If True, outputs will be JSON formatted.",
+        list: false,
+        name: "json_mode",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: false
+      },
+      max_tokens: {
+        advanced: true,
+        display_name: "Max Tokens",
+        dynamic: false,
+        info: "The maximum number of tokens to generate.",
+        list: false,
+        name: "max_tokens",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "int",
+        value: null
+      },
+      model_kwargs: {
+        advanced: true,
+        display_name: "Model Kwargs",
+        dynamic: false,
+        info: "Additional keyword arguments.",
+        list: false,
+        load_from_db: false,
+        name: "model_kwargs",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        type: "dict",
+        value: {}
+      },
+      model_name: {
+        advanced: false,
+        display_name: "Model Name",
+        dynamic: false,
+        info: "The name of the model.",
+        name: "model_name",
+        options: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: modelName
+      },
+      openai_api_base: {
+        advanced: true,
+        display_name: "OpenAI API Base",
+        dynamic: false,
+        info: "Base URL for OpenAI API.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "openai_api_base",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      output_schema: {
+        advanced: true,
+        display_name: "Schema",
+        dynamic: false,
+        info: "Output schema for structured output.",
+        list: true,
+        name: "output_schema",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        type: "table",
+        value: []
+      },
+      seed: {
+        advanced: true,
+        display_name: "Seed",
+        dynamic: false,
+        info: "Random seed for reproducibility.",
+        list: false,
+        name: "seed",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "int",
+        value: 1
+      },
+      stream: {
+        advanced: true,
+        display_name: "Stream",
+        dynamic: false,
+        info: "Stream the response.",
+        list: false,
+        name: "stream",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: false
+      },
+      system_message: {
+        advanced: false,
+        display_name: "System Message",
+        dynamic: false,
+        info: "System message for the model.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "system_message",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
         type: "str",
         value: ""
       },
       temperature: {
-        _input_type: "FloatInput",
+        advanced: false,
         display_name: "Temperature",
+        dynamic: false,
+        info: "Controls randomness. Lower is more deterministic.",
+        list: false,
+        name: "temperature",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
         type: "float",
-        value: 0.1
+        value: temperature
       }
     }
-  },
-  
-  Prompt: {
-    base_classes: ["Message"],
-    description: "Create a prompt template with dynamic variables.",
-    display_name: "Prompt",
-    icon: "braces",
-    lf_version: "1.4.2",
-    outputs: [{
-      cache: true,
-      display_name: "Prompt",
-      method: "build_prompt",
-      name: "prompt",
-      selected: "Message",
-      types: ["Message"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      template: {
-        _input_type: "PromptInput",
-        display_name: "Template",
-        type: "prompt",
-        value: ""
-      }
-    }
-  },
-  
-  TavilySearchComponent: {
-    base_classes: ["Data"],
-    description: "Search the web using Tavily AI search engine.",
-    display_name: "Tavily Search",
-    icon: "TavilyIcon",
-    lf_version: "1.2.0",
-    outputs: [{
-      cache: true,
-      display_name: "Toolset",
-      method: "to_toolkit",
-      name: "component_as_tool",
-      selected: "Tool",
-      tool_mode: true,
-      types: ["Tool"],
-      value: "__UNDEFINED__"
-    }],
-    template: {
-      _type: "Component",
-      api_key: {
-        _input_type: "SecretStrInput",
-        display_name: "Tavily API Key",
-        password: true,
-        required: true,
-        type: "str",
-        value: ""
-      },
-      query: {
-        _input_type: "MessageTextInput",
-        display_name: "Search Query",
-        tool_mode: true,
-        type: "str",
-        value: ""
-      },
-      max_results: {
-        _input_type: "IntInput",
-        display_name: "Max Results",
-        type: "int",
-        value: 5
-      }
-    }
-  }
-};
+  };
+}
 
-// Type mapping for component types
+// Type to template type mapping
 const TYPE_MAP: Record<string, string> = {
   "ChatInput": "ChatInput",
   "ChatOutput": "ChatOutput",
-  "Agent": "Agent",
-  "SearchAPI": "SearchComponent",
-  "Calculator": "CalculatorComponent",
-  "URL": "URL",
-  "LanguageModel": "LanguageModelComponent",
+  "TextInput": "TextInput",
   "Prompt": "Prompt",
-  "TavilySearch": "TavilySearchComponent"
+  "OpenAIModel": "OpenAIModel"
 };
 
 // Output info for creating edges
 const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
   "ChatInput": { name: "message", types: ["Message"] },
   "ChatOutput": { name: "message", types: ["Message"] },
-  "Agent": { name: "response", types: ["Message"] },
-  "SearchComponent": { name: "component_as_tool", types: ["Tool"] },
-  "CalculatorComponent": { name: "component_as_tool", types: ["Tool"] },
-  "URL": { name: "component_as_tool", types: ["Tool"] },
-  "LanguageModelComponent": { name: "text_output", types: ["Message"] },
+  "TextInput": { name: "text", types: ["Message"] },
   "Prompt": { name: "prompt", types: ["Message"] },
-  "TavilySearchComponent": { name: "component_as_tool", types: ["Tool"] }
+  "OpenAIModel": { name: "text_output", types: ["Message"] }
 };
 
 // Input info for creating edges
 const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: string }>> = {
   "ChatOutput": {
-    "input_value": { types: ["Data", "DataFrame", "Message"], fieldType: "str" }
+    "input_value": { types: ["Message"], fieldType: "str" }
   },
-  "Agent": {
-    "input_value": { types: ["Message"], fieldType: "str" },
-    "tools": { types: ["Tool"], fieldType: "other" }
-  },
-  "LanguageModelComponent": {
+  "OpenAIModel": {
     "input_value": { types: ["Message"], fieldType: "str" },
     "system_message": { types: ["Message"], fieldType: "str" }
+  },
+  "Prompt": {
+    // Dynamic - will be filled based on template variables
   }
 };
 
@@ -592,64 +995,72 @@ function buildWorkflowJson(plan: any) {
   const nodes: any[] = [];
   const edges: any[] = [];
   
-  let xPos = 200;
-  const yBase = 300;
-  const xSpacing = 450;
+  let xPos = 100;
+  const yBase = 200;
+  const xSpacing = 400;
+  
+  // Track prompt variable inputs for edge creation
+  const promptVariables: Record<string, string[]> = {};
   
   // Create nodes
   for (let i = 0; i < plan.components.length; i++) {
     const comp = plan.components[i];
     const templateType = TYPE_MAP[comp.type] || comp.type;
-    const template = COMPONENT_TEMPLATES[templateType];
-    
-    if (!template) {
-      console.log(`Unknown component type: ${comp.type}`);
-      continue;
-    }
-    
     const nodeId = `${templateType}-${comp.id_suffix}`;
+    const displayName = comp.display_name || templateType.replace(/([A-Z])/g, ' $1').trim();
     
-    // Deep clone template and apply config
-    const nodeTemplate = JSON.parse(JSON.stringify(template.template));
-    if (comp.config) {
-      for (const [key, value] of Object.entries(comp.config)) {
-        if (nodeTemplate[key]) {
-          nodeTemplate[key].value = value;
+    let nodeData: any;
+    
+    switch (templateType) {
+      case "ChatInput":
+        nodeData = getChatInputTemplate(nodeId, displayName);
+        break;
+      case "ChatOutput":
+        nodeData = getChatOutputTemplate(nodeId, displayName);
+        break;
+      case "TextInput":
+        nodeData = getTextInputTemplate(nodeId, displayName, comp.config?.input_value || "");
+        break;
+      case "Prompt":
+        const template = comp.config?.template || "";
+        nodeData = getPromptTemplate(nodeId, displayName, template);
+        // Store variables for edge creation
+        const varRegex = /\{(\w+)\}/g;
+        const vars: string[] = [];
+        let m;
+        while ((m = varRegex.exec(template)) !== null) {
+          if (!vars.includes(m[1])) vars.push(m[1]);
         }
-      }
+        promptVariables[nodeId] = vars;
+        break;
+      case "OpenAIModel":
+        nodeData = getOpenAIModelTemplate(
+          nodeId, 
+          displayName, 
+          comp.config?.model_name || "gpt-4o-mini",
+          comp.config?.temperature || 0.1
+        );
+        break;
+      default:
+        console.log(`Unknown component type: ${comp.type}`);
+        continue;
     }
     
     const node = {
       data: {
-        description: template.description,
-        display_name: template.display_name,
+        description: nodeData.description,
+        display_name: nodeData.display_name,
         id: nodeId,
-        node: {
-          base_classes: template.base_classes,
-          beta: false,
-          conditional_paths: [],
-          custom_fields: {},
-          description: template.description,
-          display_name: template.display_name,
-          documentation: "",
-          edited: false,
-          frozen: false,
-          icon: template.icon,
-          legacy: false,
-          lf_version: template.lf_version,
-          metadata: {},
-          output_types: [],
-          outputs: template.outputs,
-          pinned: false,
-          template: nodeTemplate
-        },
+        node: nodeData,
+        selected_output: nodeData.outputs[0]?.name,
         type: templateType
       },
       dragging: false,
       height: 300,
       id: nodeId,
       measured: { height: 300, width: 320 },
-      position: { x: xPos, y: yBase + (i % 3) * 150 },
+      position: { x: xPos, y: yBase + (i % 2) * 200 },
+      positionAbsolute: { x: xPos, y: yBase + (i % 2) * 200 },
       selected: false,
       type: "genericNode",
       width: 320
@@ -660,14 +1071,23 @@ function buildWorkflowJson(plan: any) {
   }
   
   // Create edges
-  for (const conn of plan.connections) {
+  for (const conn of plan.connections || []) {
     const sourceId = conn.from;
     const targetId = conn.to;
     const sourceType = sourceId.split('-')[0];
     const targetType = targetId.split('-')[0];
     
     const sourceOutput = OUTPUT_INFO[sourceType];
-    const targetInput = INPUT_INFO[targetType]?.[conn.to_input];
+    
+    // Handle Prompt variable inputs specially
+    let targetInput;
+    if (targetType === "Prompt") {
+      // Check if this is a variable input
+      const varName = conn.to_input;
+      targetInput = { types: ["Message", "Text"], fieldType: "str" };
+    } else {
+      targetInput = INPUT_INFO[targetType]?.[conn.to_input];
+    }
     
     if (sourceOutput && targetInput) {
       edges.push(createEdge(
@@ -680,6 +1100,8 @@ function buildWorkflowJson(plan: any) {
         targetInput.types,
         targetInput.fieldType
       ));
+    } else {
+      console.log(`Could not create edge: ${sourceId} -> ${targetId} (${conn.to_input})`);
     }
   }
   
@@ -690,9 +1112,10 @@ function buildWorkflowJson(plan: any) {
       nodes,
       viewport: { x: 0, y: 0, zoom: 0.8 }
     },
-    name: plan.name || "Generated Workflow",
     description: plan.description || "",
-    is_component: false
+    endpoint_name: null,
+    is_component: false,
+    name: plan.name || "Generated Workflow"
   };
 }
 
