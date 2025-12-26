@@ -39,6 +39,9 @@ const Index = () => {
       const workflowName = (workflowState.workflow as any).name || 'Untitled Workflow';
       const description = workflowState.explanation?.overview || '';
       
+      // Open Langflow window immediately (prevents popup blocker)
+      const langflowWindow = window.open('about:blank', '_blank');
+      
       // Save workflow and import to Langflow
       saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
         .then(async (saved) => {
@@ -46,18 +49,23 @@ const Index = () => {
             // Import to Langflow and get the flow URL
             const flowUrl = await importToLangflow(workflowState.workflow!);
             
-            if (flowUrl) {
-              // Open the imported flow directly in Langflow
-              window.open(flowUrl, '_blank');
+            if (flowUrl && langflowWindow) {
+              // Navigate to the imported flow
+              langflowWindow.location.href = flowUrl;
               
               toast({
                 title: 'Workflow imported!',
                 description: 'Opening in Langflow visual builder...',
               });
+            } else if (langflowWindow) {
+              // Fallback: close the blank window if import failed
+              langflowWindow.close();
             }
             
             // Refresh workflows list
             refreshWorkflows();
+          } else if (langflowWindow) {
+            langflowWindow.close();
           }
         });
     }
