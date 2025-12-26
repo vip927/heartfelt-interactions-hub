@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Copy, Download, Check, FileJson, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
+import { Copy, Download, Check, FileJson, AlertCircle, CheckCircle2, BookOpen, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { ExplanationPanel } from '@/components/ExplanationPanel';
+import { MyWorkflowsPanel } from '@/components/MyWorkflowsPanel';
+import { SavedWorkflow } from '@/hooks/useWorkflows';
 
 interface WorkflowExplanation {
   overview: string;
@@ -23,9 +25,20 @@ interface JsonOutputPanelProps {
   rawContent: string;
   isValid: boolean;
   explanation?: WorkflowExplanation | null;
+  savedWorkflows: SavedWorkflow[];
+  isLoadingWorkflows: boolean;
+  onDeleteWorkflow: (id: string) => void;
 }
 
-export function JsonOutputPanel({ workflow, rawContent, isValid, explanation }: JsonOutputPanelProps) {
+export function JsonOutputPanel({ 
+  workflow, 
+  rawContent, 
+  isValid, 
+  explanation,
+  savedWorkflows,
+  isLoadingWorkflows,
+  onDeleteWorkflow 
+}: JsonOutputPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
@@ -97,6 +110,10 @@ export function JsonOutputPanel({ workflow, rawContent, isValid, explanation }: 
             <BookOpen className="w-4 h-4" />
             Guide
           </TabsTrigger>
+          <TabsTrigger value="workflows" className="gap-2">
+            <FolderOpen className="w-4 h-4" />
+            My Workflows
+          </TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2">
           {isValid ? (
@@ -153,6 +170,14 @@ export function JsonOutputPanel({ workflow, rawContent, isValid, explanation }: 
 
       <TabsContent value="guide" className="flex-1 mt-0 overflow-hidden">
         <ExplanationPanel explanation={explanation || null} />
+      </TabsContent>
+
+      <TabsContent value="workflows" className="flex-1 mt-0 overflow-hidden">
+        <MyWorkflowsPanel 
+          workflows={savedWorkflows}
+          isLoading={isLoadingWorkflows}
+          onDelete={onDeleteWorkflow}
+        />
       </TabsContent>
     </Tabs>
   );

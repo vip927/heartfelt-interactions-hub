@@ -5,11 +5,15 @@ import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/ChatInterface';
 import { JsonOutputPanel } from '@/components/JsonOutputPanel';
 import { useWorkflowGenerator } from '@/hooks/useWorkflowGenerator';
+import { useWorkflows } from '@/hooks/useWorkflows';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
+const LANGFLOW_URL = 'http://143.110.254.19:7860';
+
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
+  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, refreshWorkflows } = useWorkflows();
   const { user, loading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -30,6 +34,34 @@ const Index = () => {
       navigate('/auth');
     }
   }, [user, loading, navigate]);
+
+  // Auto-save workflow when generated and open in Langflow
+  useEffect(() => {
+    if (workflowState.workflow && workflowState.isValid) {
+      const workflowName = (workflowState.workflow as any).name || 'Untitled Workflow';
+      const description = workflowState.explanation?.overview || '';
+      
+      // Save workflow
+      saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
+        .then((saved) => {
+          if (saved) {
+            // Open Langflow in a new tab
+            window.open(LANGFLOW_URL, '_blank');
+            
+            // Copy JSON to clipboard for easy import
+            navigator.clipboard.writeText(JSON.stringify(workflowState.workflow, null, 2));
+            
+            toast({
+              title: 'Ready to import!',
+              description: 'Langflow opened in a new tab. Workflow JSON copied to clipboard.',
+            });
+            
+            // Refresh workflows list
+            refreshWorkflows();
+          }
+        });
+    }
+  }, [workflowState.workflow, workflowState.isValid]);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -128,6 +160,9 @@ const Index = () => {
             rawContent={workflowState.rawContent}
             isValid={workflowState.isValid}
             explanation={workflowState.explanation}
+            savedWorkflows={workflows}
+            isLoadingWorkflows={isLoadingWorkflows}
+            onDeleteWorkflow={deleteWorkflow}
           />
         </div>
       </div>
