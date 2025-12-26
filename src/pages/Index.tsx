@@ -127,6 +127,7 @@ const Index = () => {
             workflow={workflowState.workflow}
             rawContent={workflowState.rawContent}
             isValid={workflowState.isValid}
+            explanation={workflowState.explanation}
           />
         </div>
       </div>

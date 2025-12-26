@@ -7,10 +7,23 @@ interface Message {
   content: string;
 }
 
+interface WorkflowExplanation {
+  overview: string;
+  components: Array<{
+    name: string;
+    type: string;
+    purpose: string;
+    configuration: string;
+  }>;
+  dataFlow: string;
+  expectedOutput: string;
+}
+
 interface WorkflowState {
   workflow: object | null;
   rawContent: string;
   isValid: boolean;
+  explanation: WorkflowExplanation | null;
 }
 
 export function useWorkflowGenerator() {
@@ -20,6 +33,7 @@ export function useWorkflowGenerator() {
     workflow: null,
     rawContent: '',
     isValid: false,
+    explanation: null,
   });
   const { toast } = useToast();
 
@@ -71,6 +85,7 @@ export function useWorkflowGenerator() {
         workflow: data.workflow,
         rawContent: data.content,
         isValid: data.isValid,
+        explanation: data.explanation || null,
       });
 
       if (data.isValid) {
@@ -106,6 +121,7 @@ export function useWorkflowGenerator() {
       workflow: null,
       rawContent: '',
       isValid: false,
+      explanation: null,
     });
   }, []);
 
