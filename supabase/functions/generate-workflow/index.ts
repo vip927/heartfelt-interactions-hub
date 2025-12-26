@@ -2187,6 +2187,313 @@ class ParserComponent(Component):
   };
 }
 
+// FileComponent - For PDF/document uploads with Docling support
+function getFileComponentTemplate(nodeId: string, displayName: string = "Read File") {
+  return {
+    base_classes: ["Message", "DataFrame"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Loads content from one or more files including PDFs, images, and documents.",
+    display_name: displayName,
+    documentation: "https://docs.langflow.org/read-file",
+    edited: false,
+    field_order: [
+      "path",
+      "file_path_str",
+      "advanced_mode",
+      "pipeline",
+      "ocr_engine",
+      "md_image_placeholder",
+      "md_page_break_placeholder",
+      "doc_key",
+      "use_multithreading",
+      "concurrency_multithreading",
+      "markdown"
+    ],
+    frozen: false,
+    icon: "file-text",
+    legacy: false,
+    lf_version: "1.4.3",
+    metadata: {
+      code_hash: generateCodeHash(),
+      dependencies: {
+        dependencies: [{ name: "lfx", version: "0.2.1" }],
+        total_dependencies: 1
+      },
+      module: "lfx.components.data.file.FileComponent"
+    },
+    minimized: false,
+    output_types: [],
+    outputs: [
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Raw Content",
+        group_outputs: false,
+        method: "load_files_message",
+        name: "message",
+        selected: "Message",
+        tool_mode: true,
+        types: ["Message"],
+        value: "__UNDEFINED__"
+      },
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Files",
+        group_outputs: false,
+        method: "load_files",
+        name: "dataframe",
+        selected: "DataFrame",
+        tool_mode: true,
+        types: ["DataFrame"],
+        value: "__UNDEFINED__"
+      }
+    ],
+    pinned: false,
+    template: {
+      _type: "Component",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: `from pathlib import Path
+from lfx.base.data.base_file import BaseFileComponent
+from lfx.inputs.inputs import DropdownInput, MessageTextInput, StrInput
+from lfx.io import BoolInput, FileInput, IntInput, Output
+from lfx.schema.data import Data
+from lfx.schema.dataframe import DataFrame
+from lfx.schema.message import Message
+
+
+class FileComponent(BaseFileComponent):
+    display_name = "Read File"
+    description = "Loads content from one or more files."
+    documentation = "https://docs.langflow.org/read-file"
+    icon = "file-text"
+    name = "File"
+    add_tool_output = True
+
+    VALID_EXTENSIONS = [
+        "csv", "json", "pdf", "txt", "md", "mdx", "yaml", "yml", "xml",
+        "html", "htm", "docx", "py", "sh", "sql", "js", "ts", "tsx",
+        "jpg", "jpeg", "png", "bmp", "tiff", "webp", "pptx", "xlsx", "xls"
+    ]
+
+    inputs = [
+        FileInput(
+            name="path",
+            display_name="Files",
+            file_types=VALID_EXTENSIONS,
+            info="Upload one or more files to read.",
+            is_list=True,
+            required=False,
+        ),
+        StrInput(
+            name="file_path_str",
+            display_name="File Path",
+            info="Path to the file to read (used in tool mode).",
+            show=False,
+            advanced=True,
+            tool_mode=True,
+            required=False,
+        ),
+        BoolInput(
+            name="advanced_mode",
+            display_name="Advanced Parser",
+            value=False,
+            info="Enable advanced document processing with Docling for PDFs, images, and office documents.",
+            show=True,
+        ),
+        DropdownInput(
+            name="pipeline",
+            display_name="Pipeline",
+            info="Docling pipeline to use",
+            options=["standard", "vlm"],
+            value="standard",
+            advanced=True,
+        ),
+        DropdownInput(
+            name="ocr_engine",
+            display_name="OCR Engine",
+            info="OCR engine to use. Only available when pipeline is 'standard'.",
+            options=["None", "easyocr"],
+            value="easyocr",
+            show=False,
+            advanced=True,
+        ),
+        IntInput(
+            name="concurrency_multithreading",
+            display_name="Processing Concurrency",
+            advanced=True,
+            info="Number of files to process concurrently.",
+            value=1,
+        ),
+        BoolInput(
+            name="markdown",
+            display_name="Markdown Export",
+            info="Export processed documents to Markdown format.",
+            value=False,
+            show=False,
+        ),
+    ]
+
+    outputs = [
+        Output(display_name="Raw Content", name="message", method="load_files_message", tool_mode=True),
+    ]
+
+    def load_files_message(self) -> Message:
+        result = self.load_files()
+        if hasattr(result, 'text'):
+            return Message(text=result.text)
+        return Message(text=str(result))
+`
+      },
+      path: {
+        _input_type: "FileInput",
+        advanced: false,
+        display_name: "Files",
+        dynamic: false,
+        fileTypes: ["csv", "json", "pdf", "txt", "md", "mdx", "yaml", "yml", "xml", "html", "htm", "docx", "py", "sh", "sql", "js", "ts", "tsx", "jpg", "jpeg", "png", "bmp", "tiff", "webp", "pptx", "xlsx", "xls"],
+        file_path: "",
+        info: "Upload one or more files to read.",
+        list: true,
+        name: "path",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "file",
+        value: ""
+      },
+      file_path_str: {
+        _input_type: "StrInput",
+        advanced: true,
+        display_name: "File Path",
+        dynamic: false,
+        info: "Path to the file to read (used in tool mode).",
+        list: false,
+        load_from_db: false,
+        name: "file_path_str",
+        placeholder: "",
+        required: false,
+        show: false,
+        title_case: false,
+        tool_mode: true,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      advanced_mode: {
+        _input_type: "BoolInput",
+        advanced: false,
+        display_name: "Advanced Parser",
+        dynamic: false,
+        info: "Enable advanced document processing with Docling for PDFs, images, and office documents.",
+        list: false,
+        list_add_label: "Add More",
+        name: "advanced_mode",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: false
+      },
+      pipeline: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        display_name: "Pipeline",
+        dynamic: false,
+        info: "Docling pipeline to use",
+        name: "pipeline",
+        options: ["standard", "vlm"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: "standard"
+      },
+      ocr_engine: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        display_name: "OCR Engine",
+        dynamic: false,
+        info: "OCR engine to use. Only available when pipeline is 'standard'.",
+        name: "ocr_engine",
+        options: ["None", "easyocr"],
+        placeholder: "",
+        required: false,
+        show: false,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: "easyocr"
+      },
+      concurrency_multithreading: {
+        _input_type: "IntInput",
+        advanced: true,
+        display_name: "Processing Concurrency",
+        dynamic: false,
+        info: "Number of files to process concurrently.",
+        list: false,
+        list_add_label: "Add More",
+        name: "concurrency_multithreading",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "int",
+        value: 1
+      },
+      markdown: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Markdown Export",
+        dynamic: false,
+        info: "Export processed documents to Markdown format. Only available when advanced mode is enabled.",
+        list: false,
+        list_add_label: "Add More",
+        name: "markdown",
+        placeholder: "",
+        required: false,
+        show: false,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: false
+      }
+    },
+    tool_mode: false
+  };
+}
+
 // ===============================================
 // UPDATED SYSTEM PROMPT WITH CORRECT COMPONENT TYPES
 // ===============================================
@@ -2271,6 +2578,15 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
 - Output: "parsed_text" → ["Message"]
 - Use for: Converting DataFrame/Data to Message text
 
+### FileComponent (IMPORTANT: Use for PDF uploads, document reading)
+- Type: "FileComponent"
+- Outputs:
+  - "message" → ["Message"] (raw text content from files)
+  - "dataframe" → ["DataFrame"] (structured file data)
+- Use for: Reading/uploading PDFs, documents, images with OCR support
+- Supports: PDF, DOCX, PPTX, XLSX, TXT, MD, JSON, CSV, images (JPG, PNG, etc.)
+- Note: Output typically goes through Parser before connecting to Prompt for RAG pipelines
+
 ## Connection Rules
 
 1. ChatInput.message → LanguageModelComponent.input_value (direct chat)
@@ -2282,6 +2598,8 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
 7. LanguageModelComponent.text_output → ChatOutput.input_value
 8. URLComponent.page_results → ParserComponent.input_data
 9. ParserComponent.parsed_text → Prompt.{content_variable}
+10. FileComponent.message → Prompt.{document_variable} (for RAG)
+11. FileComponent.dataframe → ParserComponent.input_data (for structured parsing)
 
 ## Common Patterns
 
@@ -2347,6 +2665,23 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
   ]
 }
 
+### RAG Pipeline with PDF Upload (IMPORTANT: Use FileComponent for document uploads)
+{
+  "components": [
+    { "type": "FileComponent", "id_suffix": "file01", "display_name": "PDF Upload" },
+    { "type": "ChatInput", "id_suffix": "inp02", "display_name": "User Question" },
+    { "type": "Prompt", "id_suffix": "pmt03", "config": { "template": "Based on the following document content, answer the question.\\n\\nDocument:\\n{document}\\n\\nQuestion: {question}" } },
+    { "type": "LanguageModelComponent", "id_suffix": "llm04", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out05" }
+  ],
+  "connections": [
+    { "from": "FileComponent-file01", "from_output": "message", "to": "Prompt-pmt03", "to_input": "document" },
+    { "from": "ChatInput-inp02", "from_output": "message", "to": "Prompt-pmt03", "to_input": "question" },
+    { "from": "Prompt-pmt03", "from_output": "prompt", "to": "LanguageModelComponent-llm04", "to_input": "input_value" },
+    { "from": "LanguageModelComponent-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
+  ]
+}
+
 RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
 
 // ===============================================
@@ -2362,7 +2697,9 @@ const TYPE_MAP: Record<string, string> = {
   "OpenAIModel": "LanguageModelComponent", // Map old type to new
   "Memory": "Memory",
   "URLComponent": "URLComponent",
-  "ParserComponent": "ParserComponent"
+  "ParserComponent": "ParserComponent",
+  "FileComponent": "FileComponent",
+  "File": "FileComponent" // Alias
 };
 
 const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
@@ -2373,7 +2710,8 @@ const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
   "LanguageModelComponent": { name: "text_output", types: ["Message"] },
   "Memory": { name: "messages_text", types: ["Message"] },
   "URLComponent": { name: "page_results", types: ["DataFrame"] },
-  "ParserComponent": { name: "parsed_text", types: ["Message"] }
+  "ParserComponent": { name: "parsed_text", types: ["Message"] },
+  "FileComponent": { name: "message", types: ["Message"] }
 };
 
 const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: string }>> = {
@@ -2387,7 +2725,8 @@ const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: st
   "Prompt": {},
   "ParserComponent": {
     "input_data": { types: ["DataFrame", "Data"], fieldType: "other" }
-  }
+  },
+  "FileComponent": {}
 };
 
 // ===============================================
@@ -2449,6 +2788,9 @@ function buildWorkflowJson(plan: any) {
         break;
       case "ParserComponent":
         nodeData = getParserComponentTemplate(nodeId, displayName);
+        break;
+      case "FileComponent":
+        nodeData = getFileComponentTemplate(nodeId, displayName);
         break;
       default:
         console.log(`Unknown component type: ${comp.type}`);
