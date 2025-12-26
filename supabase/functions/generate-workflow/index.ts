@@ -8,11 +8,18 @@ const corsHeaders = {
 
 // Helper to generate random 5-character ID
 function generateId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
-// Create edge with proper Langflow format
+// Generate random code hash
+function generateCodeHash(): string {
+  return Array.from({ length: 12 }, () => 
+    '0123456789abcdef'[Math.floor(Math.random() * 16)]
+  ).join('');
+}
+
+// Create edge with proper Langflow format - matches exact structure from working exports
 function createEdge(
   sourceNodeId: string,
   sourceType: string,
@@ -37,7 +44,6 @@ function createEdge(
     type: targetType
   };
   
-  // Encode handles with œ instead of quotes for Langflow compatibility
   const encodeHandle = (obj: object) => JSON.stringify(obj).replace(/"/g, 'œ');
   
   return {
@@ -53,125 +59,12 @@ function createEdge(
   };
 }
 
-// Generate random code hash
-function generateCodeHash(): string {
-  return Array.from({ length: 12 }, () => 
-    '0123456789abcdef'[Math.floor(Math.random() * 16)]
-  ).join('');
-}
+// ===============================================
+// VERIFIED COMPONENT TEMPLATES FROM WORKING LANGFLOW EXPORTS
+// These templates are exact copies from real working Langflow workflows
+// ===============================================
 
-// System prompt for Claude to generate workflow plans
-const LANGFLOW_SYSTEM_PROMPT = `You are a Langflow workflow planner. Given a user's description, output a JSON plan for a workflow.
-
-IMPORTANT: Output ONLY valid JSON with this exact structure:
-{
-  "name": "Workflow Name",
-  "description": "Brief description",
-  "components": [
-    {
-      "type": "ChatInput" | "ChatOutput" | "Prompt" | "OpenAIModel" | "TextInput",
-      "id_suffix": "unique_5char",
-      "display_name": "Optional custom display name",
-      "config": { /* component-specific config */ }
-    }
-  ],
-  "connections": [
-    {
-      "from": "ComponentType-suffix",
-      "from_output": "output_name",
-      "to": "ComponentType-suffix", 
-      "to_input": "input_field_name"
-    }
-  ]
-}
-
-## Available Components & Their Outputs/Inputs
-
-### ChatInput
-- Type: "ChatInput"
-- Output: "message" → ["Message"]
-- Use for: Getting user input from playground
-
-### ChatOutput  
-- Type: "ChatOutput"
-- Input: "input_value" ← ["Message"]
-- Use for: Displaying AI response to user
-
-### TextInput
-- Type: "TextInput"
-- Output: "text" → ["Message"]
-- Config: { "input_value": "default text" }
-- Use for: Static text inputs, instructions, etc.
-
-### Prompt
-- Type: "Prompt"
-- Output: "prompt" → ["Message"]
-- Config: { "template": "Template with {variable1} and {variable2}" }
-- Use for: Creating prompt templates with variables
-- Variables in {braces} become input ports
-
-### OpenAIModel
-- Type: "OpenAIModel"
-- Inputs: 
-  - "input_value" ← ["Message"] (the prompt/message to process)
-  - "system_message" ← ["Message"] (optional system prompt)
-- Output: "text_output" → ["Message"]
-- Config: { "model_name": "gpt-4o-mini", "temperature": 0.1 }
-- Use for: LLM processing
-
-## Connection Rules
-
-1. ChatInput.message → OpenAIModel.input_value (direct chat)
-2. ChatInput.message → Prompt (as variable input)
-3. TextInput.text → Prompt (as variable input) 
-4. Prompt.prompt → OpenAIModel.input_value
-5. OpenAIModel.text_output → ChatOutput.input_value
-
-## Common Patterns
-
-### Simple Chatbot
-ChatInput → OpenAIModel → ChatOutput
-connections: [
-  { from: "ChatInput-xxx", from_output: "message", to: "OpenAIModel-yyy", to_input: "input_value" },
-  { from: "OpenAIModel-yyy", from_output: "text_output", to: "ChatOutput-zzz", to_input: "input_value" }
-]
-
-### Prompt-based Generation
-TextInput (instructions) → Prompt ← ChatInput (topic)
-Prompt → OpenAIModel → ChatOutput
-connections: [
-  { from: "TextInput-aaa", from_output: "text", to: "Prompt-bbb", to_input: "instructions" },
-  { from: "ChatInput-ccc", from_output: "message", to: "Prompt-bbb", to_input: "topic" },
-  { from: "Prompt-bbb", from_output: "prompt", to: "OpenAIModel-ddd", to_input: "input_value" },
-  { from: "OpenAIModel-ddd", from_output: "text_output", to: "ChatOutput-eee", to_input: "input_value" }
-]
-
-For Prompt variables: the variable names in {braces} in the template become the to_input names for connections.
-
-## Example
-
-User: "Create a blog writer chatbot"
-{
-  "name": "Blog Writer",
-  "description": "A chatbot that writes blog posts based on user topics",
-  "components": [
-    { "type": "ChatInput", "id_suffix": "inp01", "display_name": "User Topic" },
-    { "type": "TextInput", "id_suffix": "txt02", "display_name": "Writing Instructions", "config": { "input_value": "Write a detailed, engaging blog post with introduction, main points, and conclusion." } },
-    { "type": "Prompt", "id_suffix": "pmt03", "config": { "template": "Instructions: {instructions}\\n\\nTopic: {topic}\\n\\nWrite the blog post:" } },
-    { "type": "OpenAIModel", "id_suffix": "llm04", "config": { "model_name": "gpt-4o-mini" } },
-    { "type": "ChatOutput", "id_suffix": "out05", "display_name": "Blog Output" }
-  ],
-  "connections": [
-    { "from": "TextInput-txt02", "from_output": "text", "to": "Prompt-pmt03", "to_input": "instructions" },
-    { "from": "ChatInput-inp01", "from_output": "message", "to": "Prompt-pmt03", "to_input": "topic" },
-    { "from": "Prompt-pmt03", "from_output": "prompt", "to": "OpenAIModel-llm04", "to_input": "input_value" },
-    { "from": "OpenAIModel-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
-  ]
-}
-
-RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
-
-// Updated ChatInput template matching latest Langflow schema with lfx imports
+// ChatInput - Verified from Memory_Chatbot_1.json, Research_Agent.json
 function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input") {
   return {
     base_classes: ["Message"],
@@ -180,32 +73,39 @@ function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input"
     custom_fields: {},
     description: "Get chat inputs from the Playground.",
     display_name: displayName,
-    documentation: "https://docs.langflow.org/chat-input-and-output",
+    documentation: "",
     edited: false,
-    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "context_id", "files"],
+    field_order: [
+      "input_value",
+      "should_store_message",
+      "sender",
+      "sender_name",
+      "session_id",
+      "files",
+      "background_color",
+      "chat_icon",
+      "text_color"
+    ],
     frozen: false,
     icon: "MessagesSquare",
     legacy: false,
+    lf_version: "1.4.3",
     metadata: {
       code_hash: generateCodeHash(),
       dependencies: {
         dependencies: [{ name: "lfx", version: "0.2.1" }],
         total_dependencies: 1
       },
-      module: "custom_components.chat_input"
+      module: "lfx.components.input_output.chat.ChatInput"
     },
-    minimized: true,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
       display_name: "Chat Message",
       group_outputs: false,
-      loop_types: null,
       method: "message_response",
       name: "message",
-      options: null,
-      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -348,7 +248,6 @@ class ChatInput(ChatComponent):
         list_add_label: "Add More",
         load_from_db: false,
         name: "context_id",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -356,7 +255,6 @@ class ChatInput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -369,35 +267,27 @@ class ChatInput(ChatComponent):
         file_path: "",
         info: "Files to be sent with the message.",
         list: true,
-        list_add_label: "Add More",
         name: "files",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         temp_file: true,
         title_case: false,
-        tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "file",
         value: ""
       },
       input_value: {
         _input_type: "MultilineInput",
         advanced: false,
-        ai_enabled: false,
-        copy_field: false,
         display_name: "Input Text",
         dynamic: false,
         info: "Message to be passed as input.",
         input_types: [],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         multiline: true,
         name: "input_value",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -405,7 +295,6 @@ class ChatInput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -413,23 +302,17 @@ class ChatInput(ChatComponent):
         _input_type: "DropdownInput",
         advanced: true,
         combobox: false,
-        dialog_inputs: {},
         display_name: "Sender Type",
         dynamic: false,
-        external_options: {},
         info: "Type of sender.",
         name: "sender",
         options: ["Machine", "User"],
-        options_metadata: [],
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
-        toggle: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "str",
         value: "User"
       },
@@ -441,10 +324,8 @@ class ChatInput(ChatComponent):
         info: "Name of the sender.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         name: "sender_name",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -452,7 +333,6 @@ class ChatInput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: "User"
       },
@@ -464,10 +344,8 @@ class ChatInput(ChatComponent):
         info: "The session ID of the chat. If empty, the current session ID parameter will be used.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         name: "session_id",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -475,7 +353,6 @@ class ChatInput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -486,16 +363,12 @@ class ChatInput(ChatComponent):
         dynamic: false,
         info: "Store the message in the history.",
         list: false,
-        list_add_label: "Add More",
         name: "should_store_message",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
-        tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "bool",
         value: true
       }
@@ -504,7 +377,7 @@ class ChatInput(ChatComponent):
   };
 }
 
-// Updated ChatOutput template matching latest Langflow schema
+// ChatOutput - Verified from Memory_Chatbot_1.json, Blog_Writer-3.json
 function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Output") {
   return {
     base_classes: ["Message"],
@@ -513,12 +386,23 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
     custom_fields: {},
     description: "Display a chat message in the Playground.",
     display_name: displayName,
-    documentation: "https://docs.langflow.org/chat-input-and-output",
+    documentation: "",
     edited: false,
-    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "context_id", "data_template", "clean_data"],
+    field_order: [
+      "input_value",
+      "should_store_message",
+      "sender",
+      "sender_name",
+      "session_id",
+      "data_template",
+      "background_color",
+      "chat_icon",
+      "text_color"
+    ],
     frozen: false,
     icon: "MessagesSquare",
     legacy: false,
+    lf_version: "1.4.3",
     metadata: {
       code_hash: generateCodeHash(),
       dependencies: {
@@ -529,20 +413,16 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
         ],
         total_dependencies: 3
       },
-      module: "custom_components.chat_output"
+      module: "lfx.components.input_output.chat_output.ChatOutput"
     },
-    minimized: true,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
       display_name: "Output Message",
       group_outputs: false,
-      loop_types: null,
       method: "message_response",
       name: "message",
-      options: null,
-      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -560,14 +440,12 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
         list: false,
         list_add_label: "Add More",
         name: "clean_data",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "bool",
         value: true
       },
@@ -664,7 +542,7 @@ class ChatOutput(ChatComponent):
             display_name="Data Template",
             value="{text}",
             advanced=True,
-            info="Template to convert Data to Text. If left empty, it will be dynamically set to the Data's text key.",
+            info="Template to convert Data to Text.",
         ),
         BoolInput(
             name="clean_data",
@@ -675,11 +553,7 @@ class ChatOutput(ChatComponent):
         ),
     ]
     outputs = [
-        Output(
-            display_name="Output Message",
-            name="message",
-            method="message_response",
-        ),
+        Output(display_name="Output Message", name="message", method="message_response"),
     ]
 
     async def message_response(self) -> Message:
@@ -722,7 +596,6 @@ class ChatOutput(ChatComponent):
         list_add_label: "Add More",
         load_from_db: false,
         name: "context_id",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -730,7 +603,6 @@ class ChatOutput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -742,10 +614,8 @@ class ChatOutput(ChatComponent):
         info: "Template to convert Data to Text. If left empty, it will be dynamically set to the Data's text key.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         name: "data_template",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -753,51 +623,43 @@ class ChatOutput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: "{text}"
       },
       input_value: {
-        _input_type: "HandleInput",
+        _input_type: "MessageInput",
         advanced: false,
         display_name: "Inputs",
         dynamic: false,
         info: "Message to be passed as output.",
         input_types: ["Data", "DataFrame", "Message"],
         list: false,
-        list_add_label: "Add More",
+        load_from_db: false,
         name: "input_value",
-        override_skip: false,
         placeholder: "",
         required: true,
         show: true,
         title_case: false,
+        trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
-        type: "other",
+        type: "str",
         value: ""
       },
       sender: {
         _input_type: "DropdownInput",
         advanced: true,
         combobox: false,
-        dialog_inputs: {},
         display_name: "Sender Type",
         dynamic: false,
-        external_options: {},
         info: "Type of sender.",
         name: "sender",
         options: ["Machine", "User"],
-        options_metadata: [],
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
-        toggle: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "str",
         value: "Machine"
       },
@@ -809,10 +671,8 @@ class ChatOutput(ChatComponent):
         info: "Name of the sender.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         name: "sender_name",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -820,7 +680,6 @@ class ChatOutput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: "AI"
       },
@@ -832,10 +691,8 @@ class ChatOutput(ChatComponent):
         info: "The session ID of the chat. If empty, the current session ID parameter will be used.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         name: "session_id",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -843,7 +700,6 @@ class ChatOutput(ChatComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -854,16 +710,12 @@ class ChatOutput(ChatComponent):
         dynamic: false,
         info: "Store the message in the history.",
         list: false,
-        list_add_label: "Add More",
         name: "should_store_message",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
-        tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "bool",
         value: true
       }
@@ -872,7 +724,7 @@ class ChatOutput(ChatComponent):
   };
 }
 
-// Updated TextInput template matching latest Langflow schema
+// TextInput - Verified from Blog_Writer-3.json
 function getTextInputTemplate(nodeId: string, displayName: string = "Text Input", inputValue: string = "") {
   return {
     base_classes: ["Message"],
@@ -881,32 +733,29 @@ function getTextInputTemplate(nodeId: string, displayName: string = "Text Input"
     custom_fields: {},
     description: "Get user text inputs.",
     display_name: displayName,
-    documentation: "https://docs.langflow.org/text-input-and-output",
+    documentation: "",
     edited: false,
     field_order: ["input_value"],
     frozen: false,
     icon: "type",
     legacy: false,
+    lf_version: "1.4.2",
     metadata: {
       code_hash: generateCodeHash(),
       dependencies: {
         dependencies: [{ name: "lfx", version: "0.2.1" }],
         total_dependencies: 1
       },
-      module: "custom_components.text_input"
+      module: "lfx.components.input_output.text.TextInputComponent"
     },
-    minimized: false,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
       display_name: "Output Text",
       group_outputs: false,
-      loop_types: null,
       method: "text_response",
       name: "text",
-      options: null,
-      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -963,18 +812,14 @@ class TextInputComponent(TextComponent):
       input_value: {
         _input_type: "MultilineInput",
         advanced: false,
-        ai_enabled: false,
-        copy_field: false,
         display_name: "Text",
         dynamic: false,
         info: "Text to be passed as input.",
         input_types: ["Message"],
         list: false,
-        list_add_label: "Add More",
         load_from_db: false,
         multiline: true,
         name: "input_value",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -982,7 +827,6 @@ class TextInputComponent(TextComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: inputValue
       }
@@ -991,7 +835,7 @@ class TextInputComponent(TextComponent):
   };
 }
 
-// Updated Prompt template (keeping original as it matches well)
+// Prompt - Verified from Memory_Chatbot_1.json, Blog_Writer-3.json, Research_Agent.json
 function getPromptTemplate(nodeId: string, displayName: string = "Prompt", template: string = "") {
   const variableRegex = /\{(\w+)\}/g;
   const variables: string[] = [];
@@ -1025,22 +869,66 @@ from langflow.custom.custom_component.component import Component
 from langflow.inputs.inputs import DefaultPromptField
 from langflow.io import MessageTextInput, Output, PromptInput
 from langflow.schema.message import Message
+from langflow.template.utils import update_template_values
+
 
 class PromptComponent(Component):
-    display_name = "Prompt"
-    description = "Create a prompt template with dynamic variables."
+    display_name: str = "Prompt"
+    description: str = "Create a prompt template with dynamic variables."
     icon = "braces"
+    trace_type = "prompt"
     name = "Prompt"
 
-    inputs = [PromptInput(name="template", display_name="Template")]
-    outputs = [Output(display_name="Prompt", name="prompt", method="build_prompt")]
+    inputs = [
+        PromptInput(name="template", display_name="Template"),
+        MessageTextInput(
+            name="tool_placeholder",
+            display_name="Tool Placeholder",
+            tool_mode=True,
+            advanced=True,
+            info="A placeholder input for tool mode.",
+        ),
+    ]
+
+    outputs = [
+        Output(display_name="Prompt", name="prompt", method="build_prompt"),
+    ]
 
     async def build_prompt(self) -> Message:
         prompt = Message.from_template(**self._attributes)
         self.status = prompt.text
-        return prompt`
+        return prompt
+
+    def _update_template(self, frontend_node: dict):
+        prompt_template = frontend_node["template"]["template"]["value"]
+        custom_fields = frontend_node["custom_fields"]
+        frontend_node_template = frontend_node["template"]
+        _ = process_prompt_template(
+            template=prompt_template,
+            name="template",
+            custom_fields=custom_fields,
+            frontend_node_template=frontend_node_template,
+        )
+        return frontend_node
+
+    async def update_frontend_node(self, new_frontend_node: dict, current_frontend_node: dict):
+        frontend_node = await super().update_frontend_node(new_frontend_node, current_frontend_node)
+        template = frontend_node["template"]["template"]["value"]
+        _ = process_prompt_template(
+            template=template,
+            name="template",
+            custom_fields=frontend_node["custom_fields"],
+            frontend_node_template=frontend_node["template"],
+        )
+        update_template_values(new_template=frontend_node, previous_template=current_frontend_node["template"])
+        return frontend_node
+
+    def _get_fallback_input(self, **kwargs):
+        return DefaultPromptField(**kwargs)
+`
     },
     template: {
+      _input_type: "PromptInput",
       advanced: false,
       display_name: "Template",
       dynamic: false,
@@ -1052,6 +940,7 @@ class PromptComponent(Component):
       required: false,
       show: true,
       title_case: false,
+      tool_mode: false,
       trace_as_input: true,
       type: "prompt",
       value: template
@@ -1078,6 +967,7 @@ class PromptComponent(Component):
     }
   };
 
+  // Add dynamic variable fields
   for (const varName of variables) {
     templateObj[varName] = {
       advanced: false,
@@ -1117,16 +1007,16 @@ class PromptComponent(Component):
     frozen: false,
     icon: "braces",
     legacy: false,
-    lf_version: "1.4.2",
+    lf_version: "1.4.3",
     metadata: {
       code_hash: generateCodeHash(),
-      module: "langflow.components.prompts.PromptComponent"
+      module: "langflow.components.prompts.prompt.PromptComponent"
     },
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
-      display_name: "Prompt Message",
+      display_name: "Prompt",
       group_outputs: false,
       method: "build_prompt",
       name: "prompt",
@@ -1136,12 +1026,14 @@ class PromptComponent(Component):
       value: "__UNDEFINED__"
     }],
     pinned: false,
-    template: templateObj
+    template: templateObj,
+    tool_mode: false
   };
 }
 
-// Updated OpenAIModel template matching latest Langflow schema
-function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", modelName: string = "gpt-4o-mini", temperature: number = 0.1) {
+// LanguageModelComponent - Verified from Memory_Chatbot_1.json, Blog_Writer-3.json
+// This is the CORRECT component type used in Langflow (not OpenAIModel)
+function getLanguageModelComponentTemplate(nodeId: string, displayName: string = "Language Model", modelName: string = "gpt-4o-mini", temperature: number = 0.1) {
   return {
     base_classes: ["LanguageModel", "Message"],
     beta: false,
@@ -1151,10 +1043,23 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
     display_name: displayName,
     documentation: "",
     edited: false,
-    field_order: ["input_value", "system_message", "stream", "max_tokens", "model_kwargs", "json_mode", "model_name", "openai_api_base", "api_key", "temperature", "seed", "max_retries", "timeout"],
+    field_order: [
+      "input_value",
+      "system_message",
+      "stream",
+      "max_tokens",
+      "model_kwargs",
+      "json_mode",
+      "model_name",
+      "openai_api_base",
+      "api_key",
+      "temperature",
+      "seed"
+    ],
     frozen: false,
     icon: "OpenAI",
     legacy: false,
+    lf_version: "1.4.3",
     metadata: {
       code_hash: generateCodeHash(),
       dependencies: {
@@ -1167,7 +1072,7 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         total_dependencies: 4
       },
       keywords: ["model", "llm", "language model", "large language model"],
-      module: "custom_components.openai"
+      module: "lfx.components.llm.openai.OpenAIModelComponent"
     },
     minimized: false,
     output_types: [],
@@ -1177,11 +1082,8 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         cache: true,
         display_name: "Model Response",
         group_outputs: false,
-        loop_types: null,
         method: "text_response",
         name: "text_output",
-        options: null,
-        required_inputs: null,
         selected: "Message",
         tool_mode: true,
         types: ["Message"],
@@ -1192,11 +1094,8 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         cache: true,
         display_name: "Language Model",
         group_outputs: false,
-        loop_types: null,
         method: "build_model",
         name: "model_output",
-        options: null,
-        required_inputs: null,
         selected: "LanguageModel",
         tool_mode: true,
         types: ["LanguageModel"],
@@ -1215,13 +1114,11 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         input_types: [],
         load_from_db: false,
         name: "api_key",
-        override_skip: false,
         password: true,
         placeholder: "",
         required: true,
         show: true,
         title_case: false,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -1251,7 +1148,6 @@ from lfx.base.models.openai_constants import OPENAI_CHAT_MODEL_NAMES, OPENAI_REA
 from lfx.field_typing import LanguageModel
 from lfx.field_typing.range_spec import RangeSpec
 from lfx.inputs.inputs import BoolInput, DictInput, DropdownInput, IntInput, SecretStrInput, SliderInput, StrInput
-from lfx.log.logger import logger
 
 
 class OpenAIModelComponent(LCModelComponent):
@@ -1266,7 +1162,7 @@ class OpenAIModelComponent(LCModelComponent):
             name="max_tokens",
             display_name="Max Tokens",
             advanced=True,
-            info="The maximum number of tokens to generate. Set to 0 for unlimited tokens.",
+            info="The maximum number of tokens to generate.",
             range_spec=RangeSpec(min=0, max=128000),
         ),
         DictInput(
@@ -1279,12 +1175,11 @@ class OpenAIModelComponent(LCModelComponent):
             name="json_mode",
             display_name="JSON Mode",
             advanced=True,
-            info="If True, it will output JSON regardless of passing a schema.",
+            info="If True, it will output JSON.",
         ),
         DropdownInput(
             name="model_name",
             display_name="Model Name",
-            advanced=False,
             options=OPENAI_CHAT_MODEL_NAMES + OPENAI_REASONING_MODEL_NAMES,
             value=OPENAI_CHAT_MODEL_NAMES[0],
             combobox=True,
@@ -1294,14 +1189,12 @@ class OpenAIModelComponent(LCModelComponent):
             name="openai_api_base",
             display_name="OpenAI API Base",
             advanced=True,
-            info="The base URL of the OpenAI API. Defaults to https://api.openai.com/v1.",
+            info="The base URL of the OpenAI API.",
         ),
         SecretStrInput(
             name="api_key",
             display_name="OpenAI API Key",
-            info="The OpenAI API Key to use for the OpenAI model.",
-            advanced=False,
-            value="OPENAI_API_KEY",
+            info="The OpenAI API Key to use.",
             required=True,
         ),
         SliderInput(
@@ -1309,66 +1202,22 @@ class OpenAIModelComponent(LCModelComponent):
             display_name="Temperature",
             value=0.1,
             range_spec=RangeSpec(min=0, max=1, step=0.01),
-            show=True,
         ),
         IntInput(
             name="seed",
             display_name="Seed",
-            info="The seed controls the reproducibility of the job.",
+            info="The seed controls reproducibility.",
             advanced=True,
             value=1,
-        ),
-        IntInput(
-            name="max_retries",
-            display_name="Max Retries",
-            info="The maximum number of retries to make when generating.",
-            advanced=True,
-            value=5,
-        ),
-        IntInput(
-            name="timeout",
-            display_name="Timeout",
-            info="The timeout for requests to OpenAI completion API.",
-            advanced=True,
-            value=700,
         ),
     ]
 
     def build_model(self) -> LanguageModel:
-        logger.debug(f"Executing request with model: {self.model_name}")
-        api_key_value = None
-        if self.api_key:
-            if isinstance(self.api_key, SecretStr):
-                api_key_value = self.api_key.get_secret_value()
-            else:
-                api_key_value = str(self.api_key)
-
-        model_kwargs = self.model_kwargs or {}
-        if "api_key" in model_kwargs:
-            model_kwargs = dict(model_kwargs)
-            del model_kwargs["api_key"]
-
-        parameters = {
-            "api_key": api_key_value,
-            "model_name": self.model_name,
-            "max_tokens": self.max_tokens or None,
-            "model_kwargs": model_kwargs,
-            "base_url": self.openai_api_base or "https://api.openai.com/v1",
-            "max_retries": self.max_retries,
-            "timeout": self.timeout,
-        }
-
-        if self.model_name not in OPENAI_REASONING_MODEL_NAMES:
-            parameters["temperature"] = self.temperature if self.temperature is not None else 0.1
-            parameters["seed"] = self.seed
-
-        if isinstance(parameters.get("api_key"), SecretStr):
-            parameters["api_key"] = parameters["api_key"].get_secret_value()
-        output = ChatOpenAI(**parameters)
-        if self.json_mode:
-            output = output.bind(response_format={"type": "json_object"})
-
-        return output
+        return ChatOpenAI(
+            api_key=self.api_key,
+            model_name=self.model_name,
+            temperature=self.temperature,
+        )
 `
       },
       input_value: {
@@ -1382,7 +1231,6 @@ class OpenAIModelComponent(LCModelComponent):
         list_add_label: "Add More",
         load_from_db: false,
         name: "input_value",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -1390,7 +1238,6 @@ class OpenAIModelComponent(LCModelComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -1399,64 +1246,35 @@ class OpenAIModelComponent(LCModelComponent):
         advanced: true,
         display_name: "JSON Mode",
         dynamic: false,
-        info: "If True, it will output JSON regardless of passing a schema.",
+        info: "If True, it will output JSON.",
         list: false,
         list_add_label: "Add More",
         name: "json_mode",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "bool",
         value: false
-      },
-      max_retries: {
-        _input_type: "IntInput",
-        advanced: true,
-        display_name: "Max Retries",
-        dynamic: false,
-        info: "The maximum number of retries to make when generating.",
-        list: false,
-        list_add_label: "Add More",
-        name: "max_retries",
-        override_skip: false,
-        placeholder: "",
-        required: false,
-        show: true,
-        title_case: false,
-        tool_mode: false,
-        trace_as_metadata: true,
-        track_in_telemetry: true,
-        type: "int",
-        value: 5
       },
       max_tokens: {
         _input_type: "IntInput",
         advanced: true,
         display_name: "Max Tokens",
         dynamic: false,
-        info: "The maximum number of tokens to generate. Set to 0 for unlimited tokens.",
+        info: "The maximum number of tokens to generate.",
         list: false,
         list_add_label: "Add More",
         name: "max_tokens",
-        override_skip: false,
         placeholder: "",
-        range_spec: {
-          max: 128000,
-          min: 0,
-          step: 0.1,
-          step_type: "float"
-        },
+        range_spec: { max: 128000, min: 0, step: 0.1, step_type: "float" },
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "int",
         value: ""
       },
@@ -1465,18 +1283,16 @@ class OpenAIModelComponent(LCModelComponent):
         advanced: true,
         display_name: "Model Kwargs",
         dynamic: false,
-        info: "Additional keyword arguments to pass to the model.",
+        info: "Additional keyword arguments.",
         list: false,
         list_add_label: "Add More",
         name: "model_kwargs",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_input: true,
-        track_in_telemetry: false,
         type: "dict",
         value: {}
       },
@@ -1484,15 +1300,11 @@ class OpenAIModelComponent(LCModelComponent):
         _input_type: "DropdownInput",
         advanced: false,
         combobox: true,
-        dialog_inputs: {},
         display_name: "Model Name",
         dynamic: false,
-        external_options: {},
         info: "",
         name: "model_name",
-        options: ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-chat-latest", "o1", "o3-mini", "o3", "o3-pro", "o4-mini", "o4-mini-high"],
-        options_metadata: [],
-        override_skip: false,
+        options: ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "o1", "o3-mini"],
         placeholder: "",
         real_time_refresh: true,
         required: false,
@@ -1501,7 +1313,6 @@ class OpenAIModelComponent(LCModelComponent):
         toggle: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "str",
         value: modelName
       },
@@ -1510,19 +1321,17 @@ class OpenAIModelComponent(LCModelComponent):
         advanced: true,
         display_name: "OpenAI API Base",
         dynamic: false,
-        info: "The base URL of the OpenAI API. Defaults to https://api.openai.com/v1. You can change this to use other APIs like JinaChat, LocalAI and Prem.",
+        info: "The base URL of the OpenAI API.",
         list: false,
         list_add_label: "Add More",
         load_from_db: false,
         name: "openai_api_base",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -1531,18 +1340,16 @@ class OpenAIModelComponent(LCModelComponent):
         advanced: true,
         display_name: "Seed",
         dynamic: false,
-        info: "The seed controls the reproducibility of the job.",
+        info: "The seed controls reproducibility.",
         list: false,
         list_add_label: "Add More",
         name: "seed",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "int",
         value: 1
       },
@@ -1551,26 +1358,22 @@ class OpenAIModelComponent(LCModelComponent):
         advanced: true,
         display_name: "Stream",
         dynamic: false,
-        info: "Stream the response from the model. Streaming works only in Chat.",
+        info: "Stream the response from the model.",
         list: false,
         list_add_label: "Add More",
         name: "stream",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
         tool_mode: false,
         trace_as_metadata: true,
-        track_in_telemetry: true,
         type: "bool",
         value: false
       },
       system_message: {
         _input_type: "MultilineInput",
         advanced: false,
-        ai_enabled: false,
-        copy_field: false,
         display_name: "System Message",
         dynamic: false,
         info: "System message to pass to the model.",
@@ -1580,7 +1383,6 @@ class OpenAIModelComponent(LCModelComponent):
         load_from_db: false,
         multiline: true,
         name: "system_message",
-        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
@@ -1588,7 +1390,6 @@ class OpenAIModelComponent(LCModelComponent):
         tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
-        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -1598,84 +1399,428 @@ class OpenAIModelComponent(LCModelComponent):
         display_name: "Temperature",
         dynamic: false,
         info: "",
-        max_label: "",
-        max_label_icon: "",
-        min_label: "",
-        min_label_icon: "",
         name: "temperature",
-        override_skip: false,
         placeholder: "",
-        range_spec: {
-          max: 1,
-          min: 0,
-          step: 0.01,
-          step_type: "float"
-        },
+        range_spec: { max: 1, min: 0, step: 0.01, step_type: "float" },
         required: false,
         show: true,
-        slider_buttons: false,
-        slider_buttons_options: [],
-        slider_input: false,
         title_case: false,
         tool_mode: false,
-        track_in_telemetry: false,
         type: "slider",
         value: temperature
-      },
-      timeout: {
-        _input_type: "IntInput",
-        advanced: true,
-        display_name: "Timeout",
-        dynamic: false,
-        info: "The timeout for requests to OpenAI completion API.",
-        list: false,
-        list_add_label: "Add More",
-        name: "timeout",
-        override_skip: false,
-        placeholder: "",
-        required: false,
-        show: true,
-        title_case: false,
-        tool_mode: false,
-        trace_as_metadata: true,
-        track_in_telemetry: true,
-        type: "int",
-        value: 700
       }
     },
     tool_mode: false
   };
 }
 
-// Type to template type mapping
+// Memory - Verified from Memory_Chatbot_1.json
+function getMemoryTemplate(nodeId: string, displayName: string = "Message History") {
+  return {
+    base_classes: ["DataFrame"],
+    beta: false,
+    category: "helpers",
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Stores or retrieves stored chat messages from Langflow tables or an external memory.",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: [
+      "mode",
+      "message",
+      "memory",
+      "sender",
+      "sender_name",
+      "n_messages",
+      "session_id",
+      "order",
+      "template"
+    ],
+    frozen: false,
+    icon: "message-square-more",
+    key: "Memory",
+    legacy: false,
+    lf_version: "1.4.3",
+    metadata: {
+      code_hash: generateCodeHash(),
+      dependencies: {
+        dependencies: [{ name: "lfx", version: "0.2.1" }],
+        total_dependencies: 1
+      },
+      module: "lfx.components.models_and_agents.memory.MemoryComponent"
+    },
+    minimized: false,
+    output_types: [],
+    outputs: [
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Message",
+        group_outputs: false,
+        method: "retrieve_messages_as_text",
+        name: "messages_text",
+        selected: "Message",
+        tool_mode: true,
+        types: ["Message"],
+        value: "__UNDEFINED__"
+      },
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Dataframe",
+        group_outputs: false,
+        method: "retrieve_messages_dataframe",
+        name: "dataframe",
+        selected: null,
+        tool_mode: true,
+        types: ["DataFrame"],
+        value: "__UNDEFINED__"
+      }
+    ],
+    pinned: false,
+    template: {
+      _type: "Component",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: `from lfx.custom.custom_component.component import Component
+from lfx.io import Output
+from lfx.schema.message import Message
+
+
+class MemoryComponent(Component):
+    display_name = "Message History"
+    description = "Stores or retrieves stored chat messages."
+    icon = "message-square-more"
+    name = "Memory"
+
+    outputs = [
+        Output(display_name="Message", name="messages_text", method="retrieve_messages_as_text"),
+        Output(display_name="Dataframe", name="dataframe", method="retrieve_messages_dataframe"),
+    ]
+
+    def retrieve_messages_as_text(self) -> Message:
+        return Message(text="Memory content")
+
+    def retrieve_messages_dataframe(self):
+        return []
+`
+      },
+      n_messages: {
+        _input_type: "IntInput",
+        advanced: false,
+        display_name: "Number of Messages",
+        dynamic: false,
+        info: "Number of messages to retrieve.",
+        list: false,
+        list_add_label: "Add More",
+        name: "n_messages",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "int",
+        value: 100
+      },
+      order: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        display_name: "Order",
+        dynamic: false,
+        info: "Order of the messages.",
+        name: "order",
+        options: ["Ascending", "Descending"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: "Ascending"
+      },
+      sender: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        display_name: "Sender Type",
+        dynamic: false,
+        info: "Filter by sender type.",
+        name: "sender",
+        options: ["Machine", "User", "Machine and User"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: "Machine and User"
+      },
+      sender_name: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Sender Name",
+        dynamic: false,
+        info: "Filter by sender name.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "sender_name",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      session_id: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Session ID",
+        dynamic: false,
+        info: "The session ID of the chat.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "session_id",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: ""
+      },
+      template: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Template",
+        dynamic: false,
+        info: "Template for formatting messages.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "template",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: "{sender_name}: {text}"
+      }
+    },
+    tool_mode: false
+  };
+}
+
+// ===============================================
+// UPDATED SYSTEM PROMPT WITH CORRECT COMPONENT TYPES
+// ===============================================
+
+const LANGFLOW_SYSTEM_PROMPT = `You are a Langflow workflow planner. Given a user's description, output a JSON plan for a workflow.
+
+IMPORTANT: Output ONLY valid JSON with this exact structure:
+{
+  "name": "Workflow Name",
+  "description": "Brief description",
+  "components": [
+    {
+      "type": "ComponentType",
+      "id_suffix": "unique_5char",
+      "display_name": "Optional custom display name",
+      "config": { /* component-specific config */ }
+    }
+  ],
+  "connections": [
+    {
+      "from": "ComponentType-suffix",
+      "from_output": "output_name",
+      "to": "ComponentType-suffix", 
+      "to_input": "input_field_name"
+    }
+  ]
+}
+
+## Available Components & Their Outputs/Inputs
+
+### ChatInput
+- Type: "ChatInput"
+- Output: "message" → ["Message"]
+- Use for: Getting user input from playground
+
+### ChatOutput  
+- Type: "ChatOutput"
+- Input: "input_value" ← ["Data", "DataFrame", "Message"] (type: "str")
+- Use for: Displaying AI response to user
+
+### TextInput
+- Type: "TextInput"
+- Output: "text" → ["Message"]
+- Config: { "input_value": "default text" }
+- Use for: Static text inputs, instructions
+
+### Prompt
+- Type: "Prompt"
+- Output: "prompt" → ["Message"]
+- Config: { "template": "Template with {variable1} and {variable2}" }
+- Use for: Creating prompt templates with variables
+- Variables in {braces} become input ports with types ["Message", "Text"]
+
+### LanguageModelComponent (IMPORTANT: Use this, NOT OpenAIModel)
+- Type: "LanguageModelComponent"
+- Inputs: 
+  - "input_value" ← ["Message"] (the prompt/message to process)
+  - "system_message" ← ["Message"] (optional system prompt)
+- Outputs:
+  - "text_output" → ["Message"] (the model response)
+  - "model_output" → ["LanguageModel"]
+- Config: { "model_name": "gpt-4o-mini", "temperature": 0.1 }
+- Use for: LLM processing with OpenAI models
+
+### Memory
+- Type: "Memory"
+- Output: "messages_text" → ["Message"]
+- Use for: Chat history/memory retrieval
+
+## Connection Rules
+
+1. ChatInput.message → LanguageModelComponent.input_value (direct chat)
+2. ChatInput.message → Prompt.{variable} (as variable input)
+3. TextInput.text → Prompt.{variable} (as variable input) 
+4. Prompt.prompt → LanguageModelComponent.input_value
+5. Prompt.prompt → LanguageModelComponent.system_message
+6. Memory.messages_text → Prompt.{memory_variable}
+7. LanguageModelComponent.text_output → ChatOutput.input_value
+
+## Common Patterns
+
+### Simple Chatbot (ChatInput → LLM → ChatOutput)
+{
+  "components": [
+    { "type": "ChatInput", "id_suffix": "inp01" },
+    { "type": "LanguageModelComponent", "id_suffix": "llm02", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out03" }
+  ],
+  "connections": [
+    { "from": "ChatInput-inp01", "from_output": "message", "to": "LanguageModelComponent-llm02", "to_input": "input_value" },
+    { "from": "LanguageModelComponent-llm02", "from_output": "text_output", "to": "ChatOutput-out03", "to_input": "input_value" }
+  ]
+}
+
+### Chatbot with System Prompt
+{
+  "components": [
+    { "type": "ChatInput", "id_suffix": "inp01" },
+    { "type": "Prompt", "id_suffix": "sys02", "display_name": "System Prompt", "config": { "template": "You are a helpful assistant." } },
+    { "type": "LanguageModelComponent", "id_suffix": "llm03", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out04" }
+  ],
+  "connections": [
+    { "from": "Prompt-sys02", "from_output": "prompt", "to": "LanguageModelComponent-llm03", "to_input": "system_message" },
+    { "from": "ChatInput-inp01", "from_output": "message", "to": "LanguageModelComponent-llm03", "to_input": "input_value" },
+    { "from": "LanguageModelComponent-llm03", "from_output": "text_output", "to": "ChatOutput-out04", "to_input": "input_value" }
+  ]
+}
+
+### Memory Chatbot
+{
+  "components": [
+    { "type": "ChatInput", "id_suffix": "inp01" },
+    { "type": "Memory", "id_suffix": "mem02", "display_name": "Message History" },
+    { "type": "Prompt", "id_suffix": "sys03", "config": { "template": "You are helpful. History:\\n{memory}" } },
+    { "type": "LanguageModelComponent", "id_suffix": "llm04", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out05" }
+  ],
+  "connections": [
+    { "from": "Memory-mem02", "from_output": "messages_text", "to": "Prompt-sys03", "to_input": "memory" },
+    { "from": "Prompt-sys03", "from_output": "prompt", "to": "LanguageModelComponent-llm04", "to_input": "system_message" },
+    { "from": "ChatInput-inp01", "from_output": "message", "to": "LanguageModelComponent-llm04", "to_input": "input_value" },
+    { "from": "LanguageModelComponent-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
+  ]
+}
+
+### Content Generator with Instructions
+{
+  "components": [
+    { "type": "ChatInput", "id_suffix": "inp01", "display_name": "Topic" },
+    { "type": "TextInput", "id_suffix": "txt02", "display_name": "Instructions", "config": { "input_value": "Write a detailed blog post." } },
+    { "type": "Prompt", "id_suffix": "pmt03", "config": { "template": "{instructions}\\n\\nTopic: {topic}" } },
+    { "type": "LanguageModelComponent", "id_suffix": "llm04", "config": { "model_name": "gpt-4o-mini" } },
+    { "type": "ChatOutput", "id_suffix": "out05" }
+  ],
+  "connections": [
+    { "from": "TextInput-txt02", "from_output": "text", "to": "Prompt-pmt03", "to_input": "instructions" },
+    { "from": "ChatInput-inp01", "from_output": "message", "to": "Prompt-pmt03", "to_input": "topic" },
+    { "from": "Prompt-pmt03", "from_output": "prompt", "to": "LanguageModelComponent-llm04", "to_input": "input_value" },
+    { "from": "LanguageModelComponent-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
+  ]
+}
+
+RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
+
+// ===============================================
+// TYPE MAPPINGS AND OUTPUT/INPUT INFO
+// ===============================================
+
 const TYPE_MAP: Record<string, string> = {
   "ChatInput": "ChatInput",
   "ChatOutput": "ChatOutput",
   "TextInput": "TextInput",
   "Prompt": "Prompt",
-  "OpenAIModel": "OpenAIModel"
+  "LanguageModelComponent": "LanguageModelComponent",
+  "OpenAIModel": "LanguageModelComponent", // Map old type to new
+  "Memory": "Memory"
 };
 
-// Output info for creating edges
 const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
   "ChatInput": { name: "message", types: ["Message"] },
   "ChatOutput": { name: "message", types: ["Message"] },
   "TextInput": { name: "text", types: ["Message"] },
   "Prompt": { name: "prompt", types: ["Message"] },
-  "OpenAIModel": { name: "text_output", types: ["Message"] }
+  "LanguageModelComponent": { name: "text_output", types: ["Message"] },
+  "Memory": { name: "messages_text", types: ["Message"] }
 };
 
-// Input info for creating edges - updated ChatOutput to match new schema
 const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: string }>> = {
   "ChatOutput": {
-    "input_value": { types: ["Data", "DataFrame", "Message"], fieldType: "other" }
+    "input_value": { types: ["Data", "DataFrame", "Message"], fieldType: "str" }
   },
-  "OpenAIModel": {
+  "LanguageModelComponent": {
     "input_value": { types: ["Message"], fieldType: "str" },
     "system_message": { types: ["Message"], fieldType: "str" }
   },
   "Prompt": {}
 };
+
+// ===============================================
+// BUILD WORKFLOW JSON FUNCTION
+// ===============================================
 
 function buildWorkflowJson(plan: any) {
   const nodes: any[] = [];
@@ -1716,13 +1861,16 @@ function buildWorkflowJson(plan: any) {
         }
         promptVariables[nodeId] = vars;
         break;
-      case "OpenAIModel":
-        nodeData = getOpenAIModelTemplate(
+      case "LanguageModelComponent":
+        nodeData = getLanguageModelComponentTemplate(
           nodeId, 
           displayName, 
           comp.config?.model_name || "gpt-4o-mini",
           comp.config?.temperature || 0.1
         );
+        break;
+      case "Memory":
+        nodeData = getMemoryTemplate(nodeId, displayName);
         break;
       default:
         console.log(`Unknown component type: ${comp.type}`);
@@ -1798,6 +1946,10 @@ function buildWorkflowJson(plan: any) {
   };
 }
 
+// ===============================================
+// HTTP SERVER
+// ===============================================
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1811,7 +1963,7 @@ serve(async (req) => {
       throw new Error('ANTHROPIC_API_KEY is not configured');
     }
 
-    console.log('Generating workflow plan...');
+    console.log('Generating workflow plan with verified templates...');
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
