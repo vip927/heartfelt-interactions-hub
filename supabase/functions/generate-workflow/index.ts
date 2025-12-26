@@ -171,7 +171,7 @@ User: "Create a blog writer chatbot"
 
 RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
 
-// Full component templates matching Langflow's actual format
+// Updated ChatInput template matching latest Langflow schema with lfx imports
 function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input") {
   return {
     base_classes: ["Message"],
@@ -180,25 +180,32 @@ function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input"
     custom_fields: {},
     description: "Get chat inputs from the Playground.",
     display_name: displayName,
-    documentation: "",
+    documentation: "https://docs.langflow.org/chat-input-and-output",
     edited: false,
-    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "files"],
+    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "context_id", "files"],
     frozen: false,
     icon: "MessagesSquare",
     legacy: false,
-    lf_version: "1.4.2",
     metadata: {
       code_hash: generateCodeHash(),
-      module: "langflow.components.inputs.ChatInput"
+      dependencies: {
+        dependencies: [{ name: "lfx", version: "0.2.1" }],
+        total_dependencies: 1
+      },
+      module: "custom_components.chat_input"
     },
+    minimized: true,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
-      display_name: "Message",
+      display_name: "Chat Message",
       group_outputs: false,
+      loop_types: null,
       method: "message_response",
       name: "message",
+      options: null,
+      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -223,114 +230,281 @@ function getChatInputTemplate(nodeId: string, displayName: string = "Chat Input"
         show: true,
         title_case: false,
         type: "code",
-        value: "from langflow.base.io.chat import ChatComponent\nfrom langflow.io import DropdownInput, MessageTextInput, Output\nfrom langflow.schema.message import Message\n\nclass ChatInput(ChatComponent):\n    display_name = \"Chat Input\"\n    description = \"Get chat inputs from the Playground.\"\n    icon = \"MessagesSquare\"\n    name = \"ChatInput\"\n\n    inputs = [\n        MessageTextInput(name=\"input_value\", display_name=\"Text\", info=\"Message text.\"),\n        DropdownInput(name=\"sender\", display_name=\"Sender Type\", options=[\"Machine\", \"User\"], value=\"User\"),\n        MessageTextInput(name=\"sender_name\", display_name=\"Sender Name\", value=\"User\"),\n    ]\n    outputs = [Output(display_name=\"Message\", name=\"message\", method=\"message_response\")]\n\n    def message_response(self) -> Message:\n        return Message(text=self.input_value, sender=self.sender, sender_name=self.sender_name)"
+        value: `from lfx.base.data.utils import IMG_FILE_TYPES, TEXT_FILE_TYPES
+from lfx.base.io.chat import ChatComponent
+from lfx.inputs.inputs import BoolInput
+from lfx.io import (
+    DropdownInput,
+    FileInput,
+    MessageTextInput,
+    MultilineInput,
+    Output,
+)
+from lfx.schema.message import Message
+from lfx.utils.constants import (
+    MESSAGE_SENDER_AI,
+    MESSAGE_SENDER_NAME_USER,
+    MESSAGE_SENDER_USER,
+)
+
+
+class ChatInput(ChatComponent):
+    display_name = "Chat Input"
+    description = "Get chat inputs from the Playground."
+    documentation: str = "https://docs.langflow.org/chat-input-and-output"
+    icon = "MessagesSquare"
+    name = "ChatInput"
+    minimized = True
+
+    inputs = [
+        MultilineInput(
+            name="input_value",
+            display_name="Input Text",
+            value="",
+            info="Message to be passed as input.",
+            input_types=[],
+        ),
+        BoolInput(
+            name="should_store_message",
+            display_name="Store Messages",
+            info="Store the message in the history.",
+            value=True,
+            advanced=True,
+        ),
+        DropdownInput(
+            name="sender",
+            display_name="Sender Type",
+            options=[MESSAGE_SENDER_AI, MESSAGE_SENDER_USER],
+            value=MESSAGE_SENDER_USER,
+            info="Type of sender.",
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="sender_name",
+            display_name="Sender Name",
+            info="Name of the sender.",
+            value=MESSAGE_SENDER_NAME_USER,
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="session_id",
+            display_name="Session ID",
+            info="The session ID of the chat. If empty, the current session ID parameter will be used.",
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="context_id",
+            display_name="Context ID",
+            info="The context ID of the chat. Adds an extra layer to the local memory.",
+            value="",
+            advanced=True,
+        ),
+        FileInput(
+            name="files",
+            display_name="Files",
+            file_types=TEXT_FILE_TYPES + IMG_FILE_TYPES,
+            info="Files to be sent with the message.",
+            advanced=True,
+            is_list=True,
+            temp_file=True,
+        ),
+    ]
+    outputs = [
+        Output(display_name="Chat Message", name="message", method="message_response"),
+    ]
+
+    async def message_response(self) -> Message:
+        files = self.files if self.files else []
+        if files and not isinstance(files, list):
+            files = [files]
+        files = [f for f in files if f is not None and f != ""]
+
+        session_id = self.session_id or self.graph.session_id or ""
+        message = await Message.create(
+            text=self.input_value,
+            sender=self.sender,
+            sender_name=self.sender_name,
+            session_id=session_id,
+            context_id=self.context_id,
+            files=files,
+        )
+        if session_id and isinstance(message, Message) and self.should_store_message:
+            stored_message = await self.send_message(message)
+            self.message.value = stored_message
+            message = stored_message
+
+        self.status = message
+        return message
+`
       },
-      files: {
+      context_id: {
+        _input_type: "MessageTextInput",
         advanced: true,
-        display_name: "Files",
+        display_name: "Context ID",
         dynamic: false,
-        fileTypes: ["txt", "md", "mdx", "csv", "json", "yaml", "yml", "xml", "html", "pdf", "docx", "py", "sh", "sql", "js", "ts", "tsx"],
-        file_path: "",
-        info: "Files to be sent with the message.",
-        list: true,
+        info: "The context ID of the chat. Adds an extra layer to the local memory.",
+        input_types: ["Message"],
+        list: false,
+        list_add_label: "Add More",
         load_from_db: false,
-        name: "files",
+        name: "context_id",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        track_in_telemetry: false,
+        type: "str",
+        value: ""
+      },
+      files: {
+        _input_type: "FileInput",
+        advanced: true,
+        display_name: "Files",
+        dynamic: false,
+        fileTypes: ["csv", "json", "pdf", "txt", "md", "mdx", "yaml", "yml", "xml", "html", "htm", "docx", "py", "sh", "sql", "js", "ts", "tsx", "jpg", "jpeg", "png", "bmp", "image"],
+        file_path: "",
+        info: "Files to be sent with the message.",
+        list: true,
+        list_add_label: "Add More",
+        name: "files",
+        override_skip: false,
+        placeholder: "",
+        required: false,
+        show: true,
+        temp_file: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "file",
         value: ""
       },
       input_value: {
+        _input_type: "MultilineInput",
         advanced: false,
-        display_name: "Text",
+        ai_enabled: false,
+        copy_field: false,
+        display_name: "Input Text",
         dynamic: false,
         info: "Message to be passed as input.",
-        input_types: ["Message"],
+        input_types: [],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         multiline: true,
         name: "input_value",
-        placeholder: "Type something...",
-        required: false,
-        show: true,
-        title_case: false,
-        trace_as_input: true,
-        trace_as_metadata: true,
-        type: "str",
-        value: ""
-      },
-      sender: {
-        advanced: true,
-        display_name: "Sender Type",
-        dynamic: false,
-        info: "Type of sender.",
-        name: "sender",
-        options: ["Machine", "User"],
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
+        type: "str",
+        value: ""
+      },
+      sender: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        dialog_inputs: {},
+        display_name: "Sender Type",
+        dynamic: false,
+        external_options: {},
+        info: "Type of sender.",
+        name: "sender",
+        options: ["Machine", "User"],
+        options_metadata: [],
+        override_skip: false,
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        toggle: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "str",
         value: "User"
       },
       sender_name: {
+        _input_type: "MessageTextInput",
         advanced: true,
         display_name: "Sender Name",
         dynamic: false,
         info: "Name of the sender.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "sender_name",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: "User"
       },
       session_id: {
+        _input_type: "MessageTextInput",
         advanced: true,
         display_name: "Session ID",
         dynamic: false,
-        info: "The session ID of the chat.",
+        info: "The session ID of the chat. If empty, the current session ID parameter will be used.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "session_id",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
       should_store_message: {
+        _input_type: "BoolInput",
         advanced: true,
         display_name: "Store Messages",
         dynamic: false,
         info: "Store the message in the history.",
         list: false,
+        list_add_label: "Add More",
         name: "should_store_message",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "bool",
         value: true
       }
-    }
+    },
+    tool_mode: false
   };
 }
 
+// Updated ChatOutput template matching latest Langflow schema
 function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Output") {
   return {
     base_classes: ["Message"],
@@ -339,25 +513,36 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
     custom_fields: {},
     description: "Display a chat message in the Playground.",
     display_name: displayName,
-    documentation: "",
+    documentation: "https://docs.langflow.org/chat-input-and-output",
     edited: false,
-    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "data_template"],
+    field_order: ["input_value", "should_store_message", "sender", "sender_name", "session_id", "context_id", "data_template", "clean_data"],
     frozen: false,
     icon: "MessagesSquare",
     legacy: false,
-    lf_version: "1.4.2",
     metadata: {
       code_hash: generateCodeHash(),
-      module: "langflow.components.outputs.ChatOutput"
+      dependencies: {
+        dependencies: [
+          { name: "orjson", version: "3.10.15" },
+          { name: "fastapi", version: "0.123.0" },
+          { name: "lfx", version: "0.2.1" }
+        ],
+        total_dependencies: 3
+      },
+      module: "custom_components.chat_output"
     },
+    minimized: true,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
-      display_name: "Message",
+      display_name: "Output Message",
       group_outputs: false,
+      loop_types: null,
       method: "message_response",
       name: "message",
+      options: null,
+      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -366,6 +551,26 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
     pinned: false,
     template: {
       _type: "Component",
+      clean_data: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Basic Clean Data",
+        dynamic: false,
+        info: "Whether to clean data before converting to string.",
+        list: false,
+        list_add_label: "Add More",
+        name: "clean_data",
+        override_skip: false,
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        track_in_telemetry: true,
+        type: "bool",
+        value: true
+      },
       code: {
         advanced: true,
         dynamic: true,
@@ -382,141 +587,326 @@ function getChatOutputTemplate(nodeId: string, displayName: string = "Chat Outpu
         show: true,
         title_case: false,
         type: "code",
-        value: "from langflow.base.io.chat import ChatComponent\nfrom langflow.io import DropdownInput, MessageTextInput, HandleInput, Output\nfrom langflow.schema.message import Message\n\nclass ChatOutput(ChatComponent):\n    display_name = \"Chat Output\"\n    description = \"Display a chat message in the Playground.\"\n    icon = \"MessagesSquare\"\n    name = \"ChatOutput\"\n\n    inputs = [\n        HandleInput(name=\"input_value\", display_name=\"Text\", input_types=[\"Message\"], required=True),\n        DropdownInput(name=\"sender\", display_name=\"Sender Type\", options=[\"Machine\", \"User\"], value=\"Machine\"),\n        MessageTextInput(name=\"sender_name\", display_name=\"Sender Name\", value=\"AI\"),\n    ]\n    outputs = [Output(display_name=\"Message\", name=\"message\", method=\"message_response\")]\n\n    def message_response(self) -> Message:\n        return Message(text=self.input_value.text if hasattr(self.input_value, 'text') else str(self.input_value))"
+        value: `from collections.abc import Generator
+from typing import Any
+
+import orjson
+from fastapi.encoders import jsonable_encoder
+
+from lfx.base.io.chat import ChatComponent
+from lfx.helpers.data import safe_convert
+from lfx.inputs.inputs import BoolInput, DropdownInput, HandleInput, MessageTextInput
+from lfx.schema.data import Data
+from lfx.schema.dataframe import DataFrame
+from lfx.schema.message import Message
+from lfx.schema.properties import Source
+from lfx.template.field.base import Output
+from lfx.utils.constants import (
+    MESSAGE_SENDER_AI,
+    MESSAGE_SENDER_NAME_AI,
+    MESSAGE_SENDER_USER,
+)
+
+
+class ChatOutput(ChatComponent):
+    display_name = "Chat Output"
+    description = "Display a chat message in the Playground."
+    documentation: str = "https://docs.langflow.org/chat-input-and-output"
+    icon = "MessagesSquare"
+    name = "ChatOutput"
+    minimized = True
+
+    inputs = [
+        HandleInput(
+            name="input_value",
+            display_name="Inputs",
+            info="Message to be passed as output.",
+            input_types=["Data", "DataFrame", "Message"],
+            required=True,
+        ),
+        BoolInput(
+            name="should_store_message",
+            display_name="Store Messages",
+            info="Store the message in the history.",
+            value=True,
+            advanced=True,
+        ),
+        DropdownInput(
+            name="sender",
+            display_name="Sender Type",
+            options=[MESSAGE_SENDER_AI, MESSAGE_SENDER_USER],
+            value=MESSAGE_SENDER_AI,
+            advanced=True,
+            info="Type of sender.",
+        ),
+        MessageTextInput(
+            name="sender_name",
+            display_name="Sender Name",
+            info="Name of the sender.",
+            value=MESSAGE_SENDER_NAME_AI,
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="session_id",
+            display_name="Session ID",
+            info="The session ID of the chat. If empty, the current session ID parameter will be used.",
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="context_id",
+            display_name="Context ID",
+            info="The context ID of the chat. Adds an extra layer to the local memory.",
+            value="",
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="data_template",
+            display_name="Data Template",
+            value="{text}",
+            advanced=True,
+            info="Template to convert Data to Text. If left empty, it will be dynamically set to the Data's text key.",
+        ),
+        BoolInput(
+            name="clean_data",
+            display_name="Basic Clean Data",
+            value=True,
+            advanced=True,
+            info="Whether to clean data before converting to string.",
+        ),
+    ]
+    outputs = [
+        Output(
+            display_name="Output Message",
+            name="message",
+            method="message_response",
+        ),
+    ]
+
+    async def message_response(self) -> Message:
+        text = self.convert_to_string()
+        source, _, display_name, source_id = self.get_properties_from_source_component()
+
+        if isinstance(self.input_value, Message) and not self.is_connected_to_chat_input():
+            message = self.input_value
+            message.text = text
+            existing_session_id = message.session_id
+        else:
+            message = Message(text=text)
+            existing_session_id = None
+
+        message.sender = self.sender
+        message.sender_name = self.sender_name
+        message.session_id = (
+            self.session_id or existing_session_id or (self.graph.session_id if hasattr(self, "graph") else None) or ""
+        )
+        message.context_id = self.context_id
+        message.flow_id = self.graph.flow_id if hasattr(self, "graph") else None
+
+        if message.session_id and self.should_store_message:
+            stored_message = await self.send_message(message)
+            self.message.value = stored_message
+            message = stored_message
+
+        self.status = message
+        return message
+`
       },
-      data_template: {
+      context_id: {
+        _input_type: "MessageTextInput",
         advanced: true,
-        display_name: "Data Template",
+        display_name: "Context ID",
         dynamic: false,
-        info: "Template to convert Data to Text.",
+        info: "The context ID of the chat. Adds an extra layer to the local memory.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
-        name: "data_template",
+        name: "context_id",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
+        type: "str",
+        value: ""
+      },
+      data_template: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Data Template",
+        dynamic: false,
+        info: "Template to convert Data to Text. If left empty, it will be dynamically set to the Data's text key.",
+        input_types: ["Message"],
+        list: false,
+        list_add_label: "Add More",
+        load_from_db: false,
+        name: "data_template",
+        override_skip: false,
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: "{text}"
       },
       input_value: {
+        _input_type: "HandleInput",
         advanced: false,
-        display_name: "Text",
+        display_name: "Inputs",
         dynamic: false,
         info: "Message to be passed as output.",
-        input_types: ["Message"],
+        input_types: ["Data", "DataFrame", "Message"],
         list: false,
-        load_from_db: false,
+        list_add_label: "Add More",
         name: "input_value",
+        override_skip: false,
         placeholder: "",
         required: true,
         show: true,
         title_case: false,
-        trace_as_input: true,
         trace_as_metadata: true,
-        type: "str",
+        track_in_telemetry: false,
+        type: "other",
         value: ""
       },
       sender: {
+        _input_type: "DropdownInput",
         advanced: true,
+        combobox: false,
+        dialog_inputs: {},
         display_name: "Sender Type",
         dynamic: false,
+        external_options: {},
         info: "Type of sender.",
         name: "sender",
         options: ["Machine", "User"],
+        options_metadata: [],
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        toggle: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "str",
         value: "Machine"
       },
       sender_name: {
+        _input_type: "MessageTextInput",
         advanced: true,
         display_name: "Sender Name",
         dynamic: false,
         info: "Name of the sender.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "sender_name",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: "AI"
       },
       session_id: {
+        _input_type: "MessageTextInput",
         advanced: true,
         display_name: "Session ID",
         dynamic: false,
-        info: "The session ID of the chat.",
+        info: "The session ID of the chat. If empty, the current session ID parameter will be used.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "session_id",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
       should_store_message: {
+        _input_type: "BoolInput",
         advanced: true,
         display_name: "Store Messages",
         dynamic: false,
         info: "Store the message in the history.",
         list: false,
+        list_add_label: "Add More",
         name: "should_store_message",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "bool",
         value: true
       }
-    }
+    },
+    tool_mode: false
   };
 }
 
+// Updated TextInput template matching latest Langflow schema
 function getTextInputTemplate(nodeId: string, displayName: string = "Text Input", inputValue: string = "") {
   return {
     base_classes: ["Message"],
     beta: false,
     conditional_paths: [],
     custom_fields: {},
-    description: "Get text inputs from the Playground.",
+    description: "Get user text inputs.",
     display_name: displayName,
-    documentation: "",
+    documentation: "https://docs.langflow.org/text-input-and-output",
     edited: false,
     field_order: ["input_value"],
     frozen: false,
     icon: "type",
     legacy: false,
-    lf_version: "1.4.2",
     metadata: {
       code_hash: generateCodeHash(),
-      module: "langflow.components.inputs.TextInputComponent"
+      dependencies: {
+        dependencies: [{ name: "lfx", version: "0.2.1" }],
+        total_dependencies: 1
+      },
+      module: "custom_components.text_input"
     },
+    minimized: false,
     output_types: [],
     outputs: [{
       allows_loop: false,
       cache: true,
-      display_name: "Text",
+      display_name: "Output Text",
       group_outputs: false,
+      loop_types: null,
       method: "text_response",
       name: "text",
+      options: null,
+      required_inputs: null,
       selected: "Message",
       tool_mode: true,
       types: ["Message"],
@@ -541,34 +931,68 @@ function getTextInputTemplate(nodeId: string, displayName: string = "Text Input"
         show: true,
         title_case: false,
         type: "code",
-        value: "from langflow.base.io.text import TextComponent\nfrom langflow.io import MultilineInput, Output\nfrom langflow.schema.message import Message\n\nclass TextInputComponent(TextComponent):\n    display_name = \"Text Input\"\n    description = \"Get text inputs from the Playground.\"\n    icon = \"type\"\n    name = \"TextInput\"\n\n    inputs = [MultilineInput(name=\"input_value\", display_name=\"Text\", info=\"Text to be passed as input.\")]\n    outputs = [Output(display_name=\"Text\", name=\"text\", method=\"text_response\")]\n\n    def text_response(self) -> Message:\n        return Message(text=self.input_value)"
+        value: `from lfx.base.io.text import TextComponent
+from lfx.io import MultilineInput, Output
+from lfx.schema.message import Message
+
+
+class TextInputComponent(TextComponent):
+    display_name = "Text Input"
+    description = "Get user text inputs."
+    documentation: str = "https://docs.langflow.org/text-input-and-output"
+    icon = "type"
+    name = "TextInput"
+
+    inputs = [
+        MultilineInput(
+            name="input_value",
+            display_name="Text",
+            info="Text to be passed as input.",
+        ),
+    ]
+    outputs = [
+        Output(display_name="Output Text", name="text", method="text_response"),
+    ]
+
+    def text_response(self) -> Message:
+        return Message(
+            text=self.input_value,
+        )
+`
       },
       input_value: {
         _input_type: "MultilineInput",
         advanced: false,
+        ai_enabled: false,
+        copy_field: false,
         display_name: "Text",
         dynamic: false,
         info: "Text to be passed as input.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         multiline: true,
         name: "input_value",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: inputValue
       }
-    }
+    },
+    tool_mode: false
   };
 }
 
+// Updated Prompt template (keeping original as it matches well)
 function getPromptTemplate(nodeId: string, displayName: string = "Prompt", template: string = "") {
-  // Extract variables from template (e.g., {topic} -> topic)
   const variableRegex = /\{(\w+)\}/g;
   const variables: string[] = [];
   let match;
@@ -596,7 +1020,25 @@ function getPromptTemplate(nodeId: string, displayName: string = "Prompt", templ
       show: true,
       title_case: false,
       type: "code",
-      value: "from langflow.base.prompts.api_utils import process_prompt_template\nfrom langflow.custom.custom_component.component import Component\nfrom langflow.inputs.inputs import DefaultPromptField\nfrom langflow.io import MessageTextInput, Output, PromptInput\nfrom langflow.schema.message import Message\n\nclass PromptComponent(Component):\n    display_name = \"Prompt\"\n    description = \"Create a prompt template with dynamic variables.\"\n    icon = \"braces\"\n    name = \"Prompt\"\n\n    inputs = [PromptInput(name=\"template\", display_name=\"Template\")]\n    outputs = [Output(display_name=\"Prompt\", name=\"prompt\", method=\"build_prompt\")]\n\n    async def build_prompt(self) -> Message:\n        prompt = Message.from_template(**self._attributes)\n        self.status = prompt.text\n        return prompt"
+      value: `from langflow.base.prompts.api_utils import process_prompt_template
+from langflow.custom.custom_component.component import Component
+from langflow.inputs.inputs import DefaultPromptField
+from langflow.io import MessageTextInput, Output, PromptInput
+from langflow.schema.message import Message
+
+class PromptComponent(Component):
+    display_name = "Prompt"
+    description = "Create a prompt template with dynamic variables."
+    icon = "braces"
+    name = "Prompt"
+
+    inputs = [PromptInput(name="template", display_name="Template")]
+    outputs = [Output(display_name="Prompt", name="prompt", method="build_prompt")]
+
+    async def build_prompt(self) -> Message:
+        prompt = Message.from_template(**self._attributes)
+        self.status = prompt.text
+        return prompt`
     },
     template: {
       advanced: false,
@@ -636,7 +1078,6 @@ function getPromptTemplate(nodeId: string, displayName: string = "Prompt", templ
     }
   };
 
-  // Add variable fields
   for (const varName of variables) {
     templateObj[varName] = {
       advanced: false,
@@ -699,6 +1140,7 @@ function getPromptTemplate(nodeId: string, displayName: string = "Prompt", templ
   };
 }
 
+// Updated OpenAIModel template matching latest Langflow schema
 function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", modelName: string = "gpt-4o-mini", temperature: number = 0.1) {
   return {
     base_classes: ["LanguageModel", "Message"],
@@ -709,24 +1151,37 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
     display_name: displayName,
     documentation: "",
     edited: false,
-    field_order: ["input_value", "system_message", "stream", "max_tokens", "model_kwargs", "json_mode", "output_schema", "model_name", "openai_api_base", "api_key", "temperature", "seed"],
+    field_order: ["input_value", "system_message", "stream", "max_tokens", "model_kwargs", "json_mode", "model_name", "openai_api_base", "api_key", "temperature", "seed", "max_retries", "timeout"],
     frozen: false,
     icon: "OpenAI",
     legacy: false,
-    lf_version: "1.4.2",
     metadata: {
       code_hash: generateCodeHash(),
-      module: "langflow.components.models.OpenAIModel"
+      dependencies: {
+        dependencies: [
+          { name: "langchain_openai", version: "0.3.23" },
+          { name: "pydantic", version: "2.11.10" },
+          { name: "lfx", version: "0.2.1" },
+          { name: "openai", version: "1.82.1" }
+        ],
+        total_dependencies: 4
+      },
+      keywords: ["model", "llm", "language model", "large language model"],
+      module: "custom_components.openai"
     },
+    minimized: false,
     output_types: [],
     outputs: [
       {
         allows_loop: false,
         cache: true,
-        display_name: "Text",
+        display_name: "Model Response",
         group_outputs: false,
+        loop_types: null,
         method: "text_response",
         name: "text_output",
+        options: null,
+        required_inputs: null,
         selected: "Message",
         tool_mode: true,
         types: ["Message"],
@@ -737,9 +1192,13 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         cache: true,
         display_name: "Language Model",
         group_outputs: false,
+        loop_types: null,
         method: "build_model",
         name: "model_output",
+        options: null,
+        required_inputs: null,
         selected: "LanguageModel",
+        tool_mode: true,
         types: ["LanguageModel"],
         value: "__UNDEFINED__"
       }
@@ -748,19 +1207,21 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
     template: {
       _type: "Component",
       api_key: {
+        _input_type: "SecretStrInput",
         advanced: false,
         display_name: "OpenAI API Key",
         dynamic: false,
-        info: "The OpenAI API Key.",
-        input_types: ["Message"],
-        list: false,
-        load_from_db: true,
+        info: "The OpenAI API Key to use for the OpenAI model.",
+        input_types: [],
+        load_from_db: false,
         name: "api_key",
+        override_skip: false,
         password: true,
         placeholder: "",
-        required: false,
+        required: true,
         show: true,
         title_case: false,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
@@ -780,182 +1241,409 @@ function getOpenAIModelTemplate(nodeId: string, displayName: string = "OpenAI", 
         show: true,
         title_case: false,
         type: "code",
-        value: "from langflow.base.models.model import LCModelComponent\nfrom langflow.field_typing import LanguageModel\nfrom langflow.inputs import MessageInput, SecretStrInput, FloatInput, StrInput, DropdownInput\nfrom langflow.io import Output\nfrom langflow.schema.message import Message\n\nclass OpenAIModelComponent(LCModelComponent):\n    display_name = \"OpenAI\"\n    description = \"Generates text using OpenAI LLMs.\"\n    icon = \"OpenAI\"\n    name = \"OpenAIModel\"\n\n    inputs = [\n        MessageInput(name=\"input_value\", display_name=\"Input\"),\n        MessageInput(name=\"system_message\", display_name=\"System Message\", advanced=True),\n        DropdownInput(name=\"model_name\", display_name=\"Model Name\", options=[\"gpt-4o-mini\", \"gpt-4o\", \"gpt-4-turbo\", \"gpt-3.5-turbo\"], value=\"gpt-4o-mini\"),\n        SecretStrInput(name=\"api_key\", display_name=\"OpenAI API Key\"),\n        FloatInput(name=\"temperature\", display_name=\"Temperature\", value=0.1),\n    ]\n    outputs = [\n        Output(display_name=\"Text\", name=\"text_output\", method=\"text_response\"),\n        Output(display_name=\"Language Model\", name=\"model_output\", method=\"build_model\"),\n    ]"
+        value: `from typing import Any
+
+from langchain_openai import ChatOpenAI
+from pydantic.v1 import SecretStr
+
+from lfx.base.models.model import LCModelComponent
+from lfx.base.models.openai_constants import OPENAI_CHAT_MODEL_NAMES, OPENAI_REASONING_MODEL_NAMES
+from lfx.field_typing import LanguageModel
+from lfx.field_typing.range_spec import RangeSpec
+from lfx.inputs.inputs import BoolInput, DictInput, DropdownInput, IntInput, SecretStrInput, SliderInput, StrInput
+from lfx.log.logger import logger
+
+
+class OpenAIModelComponent(LCModelComponent):
+    display_name = "OpenAI"
+    description = "Generates text using OpenAI LLMs."
+    icon = "OpenAI"
+    name = "OpenAIModel"
+
+    inputs = [
+        *LCModelComponent.get_base_inputs(),
+        IntInput(
+            name="max_tokens",
+            display_name="Max Tokens",
+            advanced=True,
+            info="The maximum number of tokens to generate. Set to 0 for unlimited tokens.",
+            range_spec=RangeSpec(min=0, max=128000),
+        ),
+        DictInput(
+            name="model_kwargs",
+            display_name="Model Kwargs",
+            advanced=True,
+            info="Additional keyword arguments to pass to the model.",
+        ),
+        BoolInput(
+            name="json_mode",
+            display_name="JSON Mode",
+            advanced=True,
+            info="If True, it will output JSON regardless of passing a schema.",
+        ),
+        DropdownInput(
+            name="model_name",
+            display_name="Model Name",
+            advanced=False,
+            options=OPENAI_CHAT_MODEL_NAMES + OPENAI_REASONING_MODEL_NAMES,
+            value=OPENAI_CHAT_MODEL_NAMES[0],
+            combobox=True,
+            real_time_refresh=True,
+        ),
+        StrInput(
+            name="openai_api_base",
+            display_name="OpenAI API Base",
+            advanced=True,
+            info="The base URL of the OpenAI API. Defaults to https://api.openai.com/v1.",
+        ),
+        SecretStrInput(
+            name="api_key",
+            display_name="OpenAI API Key",
+            info="The OpenAI API Key to use for the OpenAI model.",
+            advanced=False,
+            value="OPENAI_API_KEY",
+            required=True,
+        ),
+        SliderInput(
+            name="temperature",
+            display_name="Temperature",
+            value=0.1,
+            range_spec=RangeSpec(min=0, max=1, step=0.01),
+            show=True,
+        ),
+        IntInput(
+            name="seed",
+            display_name="Seed",
+            info="The seed controls the reproducibility of the job.",
+            advanced=True,
+            value=1,
+        ),
+        IntInput(
+            name="max_retries",
+            display_name="Max Retries",
+            info="The maximum number of retries to make when generating.",
+            advanced=True,
+            value=5,
+        ),
+        IntInput(
+            name="timeout",
+            display_name="Timeout",
+            info="The timeout for requests to OpenAI completion API.",
+            advanced=True,
+            value=700,
+        ),
+    ]
+
+    def build_model(self) -> LanguageModel:
+        logger.debug(f"Executing request with model: {self.model_name}")
+        api_key_value = None
+        if self.api_key:
+            if isinstance(self.api_key, SecretStr):
+                api_key_value = self.api_key.get_secret_value()
+            else:
+                api_key_value = str(self.api_key)
+
+        model_kwargs = self.model_kwargs or {}
+        if "api_key" in model_kwargs:
+            model_kwargs = dict(model_kwargs)
+            del model_kwargs["api_key"]
+
+        parameters = {
+            "api_key": api_key_value,
+            "model_name": self.model_name,
+            "max_tokens": self.max_tokens or None,
+            "model_kwargs": model_kwargs,
+            "base_url": self.openai_api_base or "https://api.openai.com/v1",
+            "max_retries": self.max_retries,
+            "timeout": self.timeout,
+        }
+
+        if self.model_name not in OPENAI_REASONING_MODEL_NAMES:
+            parameters["temperature"] = self.temperature if self.temperature is not None else 0.1
+            parameters["seed"] = self.seed
+
+        if isinstance(parameters.get("api_key"), SecretStr):
+            parameters["api_key"] = parameters["api_key"].get_secret_value()
+        output = ChatOpenAI(**parameters)
+        if self.json_mode:
+            output = output.bind(response_format={"type": "json_object"})
+
+        return output
+`
       },
       input_value: {
+        _input_type: "MessageInput",
         advanced: false,
         display_name: "Input",
         dynamic: false,
-        info: "The input to the model.",
+        info: "",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "input_value",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
       json_mode: {
+        _input_type: "BoolInput",
         advanced: true,
         display_name: "JSON Mode",
         dynamic: false,
-        info: "If True, outputs will be JSON formatted.",
+        info: "If True, it will output JSON regardless of passing a schema.",
         list: false,
+        list_add_label: "Add More",
         name: "json_mode",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "bool",
         value: false
       },
+      max_retries: {
+        _input_type: "IntInput",
+        advanced: true,
+        display_name: "Max Retries",
+        dynamic: false,
+        info: "The maximum number of retries to make when generating.",
+        list: false,
+        list_add_label: "Add More",
+        name: "max_retries",
+        override_skip: false,
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        track_in_telemetry: true,
+        type: "int",
+        value: 5
+      },
       max_tokens: {
+        _input_type: "IntInput",
         advanced: true,
         display_name: "Max Tokens",
         dynamic: false,
-        info: "The maximum number of tokens to generate.",
+        info: "The maximum number of tokens to generate. Set to 0 for unlimited tokens.",
         list: false,
+        list_add_label: "Add More",
         name: "max_tokens",
+        override_skip: false,
         placeholder: "",
+        range_spec: {
+          max: 128000,
+          min: 0,
+          step: 0.1,
+          step_type: "float"
+        },
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "int",
-        value: null
+        value: ""
       },
       model_kwargs: {
+        _input_type: "DictInput",
         advanced: true,
         display_name: "Model Kwargs",
         dynamic: false,
-        info: "Additional keyword arguments.",
+        info: "Additional keyword arguments to pass to the model.",
         list: false,
-        load_from_db: false,
+        list_add_label: "Add More",
         name: "model_kwargs",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        track_in_telemetry: false,
         type: "dict",
         value: {}
       },
       model_name: {
+        _input_type: "DropdownInput",
         advanced: false,
+        combobox: true,
+        dialog_inputs: {},
         display_name: "Model Name",
         dynamic: false,
-        info: "The name of the model.",
+        external_options: {},
+        info: "",
         name: "model_name",
-        options: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+        options: ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4", "gpt-3.5-turbo", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-chat-latest", "o1", "o3-mini", "o3", "o3-pro", "o4-mini", "o4-mini-high"],
+        options_metadata: [],
+        override_skip: false,
         placeholder: "",
+        real_time_refresh: true,
         required: false,
         show: true,
         title_case: false,
+        toggle: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "str",
         value: modelName
       },
       openai_api_base: {
+        _input_type: "StrInput",
         advanced: true,
         display_name: "OpenAI API Base",
         dynamic: false,
-        info: "Base URL for OpenAI API.",
-        input_types: ["Message"],
+        info: "The base URL of the OpenAI API. Defaults to https://api.openai.com/v1. You can change this to use other APIs like JinaChat, LocalAI and Prem.",
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
         name: "openai_api_base",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
-        trace_as_input: true,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
-      output_schema: {
-        advanced: true,
-        display_name: "Schema",
-        dynamic: false,
-        info: "Output schema for structured output.",
-        list: true,
-        name: "output_schema",
-        placeholder: "",
-        required: false,
-        show: true,
-        title_case: false,
-        type: "table",
-        value: []
-      },
       seed: {
+        _input_type: "IntInput",
         advanced: true,
         display_name: "Seed",
         dynamic: false,
-        info: "Random seed for reproducibility.",
+        info: "The seed controls the reproducibility of the job.",
         list: false,
+        list_add_label: "Add More",
         name: "seed",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "int",
         value: 1
       },
       stream: {
+        _input_type: "BoolInput",
         advanced: true,
         display_name: "Stream",
         dynamic: false,
-        info: "Stream the response.",
+        info: "Stream the response from the model. Streaming works only in Chat.",
         list: false,
+        list_add_label: "Add More",
         name: "stream",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
+        track_in_telemetry: true,
         type: "bool",
         value: false
       },
       system_message: {
+        _input_type: "MultilineInput",
         advanced: false,
+        ai_enabled: false,
+        copy_field: false,
         display_name: "System Message",
         dynamic: false,
-        info: "System message for the model.",
+        info: "System message to pass to the model.",
         input_types: ["Message"],
         list: false,
+        list_add_label: "Add More",
         load_from_db: false,
+        multiline: true,
         name: "system_message",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_input: true,
         trace_as_metadata: true,
+        track_in_telemetry: false,
         type: "str",
         value: ""
       },
       temperature: {
+        _input_type: "SliderInput",
         advanced: false,
         display_name: "Temperature",
         dynamic: false,
-        info: "Controls randomness. Lower is more deterministic.",
-        list: false,
+        info: "",
+        max_label: "",
+        max_label_icon: "",
+        min_label: "",
+        min_label_icon: "",
         name: "temperature",
+        override_skip: false,
+        placeholder: "",
+        range_spec: {
+          max: 1,
+          min: 0,
+          step: 0.01,
+          step_type: "float"
+        },
+        required: false,
+        show: true,
+        slider_buttons: false,
+        slider_buttons_options: [],
+        slider_input: false,
+        title_case: false,
+        tool_mode: false,
+        track_in_telemetry: false,
+        type: "slider",
+        value: temperature
+      },
+      timeout: {
+        _input_type: "IntInput",
+        advanced: true,
+        display_name: "Timeout",
+        dynamic: false,
+        info: "The timeout for requests to OpenAI completion API.",
+        list: false,
+        list_add_label: "Add More",
+        name: "timeout",
+        override_skip: false,
         placeholder: "",
         required: false,
         show: true,
         title_case: false,
+        tool_mode: false,
         trace_as_metadata: true,
-        type: "float",
-        value: temperature
+        track_in_telemetry: true,
+        type: "int",
+        value: 700
       }
-    }
+    },
+    tool_mode: false
   };
 }
 
@@ -977,18 +1665,16 @@ const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
   "OpenAIModel": { name: "text_output", types: ["Message"] }
 };
 
-// Input info for creating edges
+// Input info for creating edges - updated ChatOutput to match new schema
 const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: string }>> = {
   "ChatOutput": {
-    "input_value": { types: ["Message"], fieldType: "str" }
+    "input_value": { types: ["Data", "DataFrame", "Message"], fieldType: "other" }
   },
   "OpenAIModel": {
     "input_value": { types: ["Message"], fieldType: "str" },
     "system_message": { types: ["Message"], fieldType: "str" }
   },
-  "Prompt": {
-    // Dynamic - will be filled based on template variables
-  }
+  "Prompt": {}
 };
 
 function buildWorkflowJson(plan: any) {
@@ -999,10 +1685,8 @@ function buildWorkflowJson(plan: any) {
   const yBase = 200;
   const xSpacing = 400;
   
-  // Track prompt variable inputs for edge creation
   const promptVariables: Record<string, string[]> = {};
   
-  // Create nodes
   for (let i = 0; i < plan.components.length; i++) {
     const comp = plan.components[i];
     const templateType = TYPE_MAP[comp.type] || comp.type;
@@ -1024,7 +1708,6 @@ function buildWorkflowJson(plan: any) {
       case "Prompt":
         const template = comp.config?.template || "";
         nodeData = getPromptTemplate(nodeId, displayName, template);
-        // Store variables for edge creation
         const varRegex = /\{(\w+)\}/g;
         const vars: string[] = [];
         let m;
@@ -1070,7 +1753,6 @@ function buildWorkflowJson(plan: any) {
     xPos += xSpacing;
   }
   
-  // Create edges
   for (const conn of plan.connections || []) {
     const sourceId = conn.from;
     const targetId = conn.to;
@@ -1079,11 +1761,8 @@ function buildWorkflowJson(plan: any) {
     
     const sourceOutput = OUTPUT_INFO[sourceType];
     
-    // Handle Prompt variable inputs specially
     let targetInput;
     if (targetType === "Prompt") {
-      // Check if this is a variable input
-      const varName = conn.to_input;
       targetInput = { types: ["Message", "Text"], fieldType: "str" };
     } else {
       targetInput = INPUT_INFO[targetType]?.[conn.to_input];
@@ -1171,7 +1850,6 @@ serve(async (req) => {
     
     console.log('Claude response:', generatedContent.slice(0, 500));
     
-    // Parse the plan
     let plan;
     let workflow = null;
     let isValid = false;
@@ -1186,7 +1864,6 @@ serve(async (req) => {
       plan = JSON.parse(cleanContent);
       console.log('Parsed plan:', JSON.stringify(plan).slice(0, 500));
       
-      // Build the actual workflow JSON
       workflow = buildWorkflowJson(plan);
       isValid = true;
       console.log('Successfully built workflow with', workflow.data.nodes.length, 'nodes and', workflow.data.edges.length, 'edges');
