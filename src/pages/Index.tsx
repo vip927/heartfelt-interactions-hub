@@ -1,12 +1,18 @@
-import { RotateCcw, Moon, Sun, Workflow } from 'lucide-react';
+import { RotateCcw, Moon, Sun, Workflow, LogOut, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/ChatInterface';
 import { JsonOutputPanel } from '@/components/JsonOutputPanel';
 import { useWorkflowGenerator } from '@/hooks/useWorkflowGenerator';
-import { useState, useEffect } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
+  const { user, loading, signOut } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -18,10 +24,46 @@ const Index = () => {
     }
   }, []);
 
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
+
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle('dark');
   };
+
+  const handleSignOut = async () => {
+    const { error } = await signOut();
+    if (error) {
+      toast({
+        title: 'Error signing out',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Signed out',
+        description: 'You have been signed out successfully.',
+      });
+      navigate('/auth');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -37,6 +79,9 @@ const Index = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground hidden sm:block">
+            {user.email}
+          </span>
           <Button
             variant="outline"
             size="sm"
@@ -53,6 +98,14 @@ const Index = () => {
             onClick={toggleTheme}
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleSignOut}
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </header>
