@@ -1639,6 +1639,554 @@ class MemoryComponent(Component):
   };
 }
 
+// URLComponent - Based on user-provided Python code
+function getURLComponentTemplate(nodeId: string, displayName: string = "URL", urls: string[] = []) {
+  return {
+    base_classes: ["DataFrame", "Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Fetch content from one or more web pages, following links recursively.",
+    display_name: displayName,
+    documentation: "https://docs.langflow.org/url",
+    edited: false,
+    field_order: [
+      "urls",
+      "max_depth",
+      "prevent_outside",
+      "use_async",
+      "format",
+      "timeout",
+      "headers",
+      "filter_text_html",
+      "continue_on_failure",
+      "check_response_status",
+      "autoset_encoding"
+    ],
+    frozen: false,
+    icon: "layout-template",
+    legacy: false,
+    lf_version: "1.4.3",
+    metadata: {
+      code_hash: generateCodeHash(),
+      dependencies: {
+        dependencies: [
+          { name: "requests", version: "2.31.0" },
+          { name: "beautifulsoup4", version: "4.12.2" },
+          { name: "langchain_community", version: "0.2.0" },
+          { name: "lfx", version: "0.2.1" }
+        ],
+        total_dependencies: 4
+      },
+      module: "lfx.components.loaders.url.URLComponent"
+    },
+    minimized: false,
+    output_types: [],
+    outputs: [
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Extracted Pages",
+        group_outputs: false,
+        method: "fetch_content",
+        name: "page_results",
+        selected: "DataFrame",
+        tool_mode: true,
+        types: ["DataFrame"],
+        value: "__UNDEFINED__"
+      },
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Raw Content",
+        group_outputs: false,
+        method: "fetch_content_as_message",
+        name: "raw_results",
+        selected: "Message",
+        tool_mode: false,
+        types: ["Message"],
+        value: "__UNDEFINED__"
+      }
+    ],
+    pinned: false,
+    template: {
+      _type: "Component",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: `import re
+import requests
+from bs4 import BeautifulSoup
+from langchain_community.document_loaders import RecursiveUrlLoader
+
+from lfx.custom.custom_component.component import Component
+from lfx.field_typing.range_spec import RangeSpec
+from lfx.helpers.data import safe_convert
+from lfx.io import BoolInput, DropdownInput, IntInput, MessageTextInput, Output, SliderInput, TableInput
+from lfx.log.logger import logger
+from lfx.schema.dataframe import DataFrame
+from lfx.schema.message import Message
+
+
+class URLComponent(Component):
+    display_name = "URL"
+    description = "Fetch content from one or more web pages, following links recursively."
+    documentation = "https://docs.langflow.org/url"
+    icon = "layout-template"
+    name = "URLComponent"
+
+    inputs = [
+        MessageTextInput(
+            name="urls",
+            display_name="URLs",
+            info="Enter one or more URLs to crawl recursively.",
+            is_list=True,
+            tool_mode=True,
+            placeholder="Enter a URL...",
+            list_add_label="Add URL",
+            input_types=[],
+        ),
+        SliderInput(
+            name="max_depth",
+            display_name="Depth",
+            info="Controls how many clicks away from the initial page the crawler will go.",
+            value=1,
+            range_spec=RangeSpec(min=1, max=5, step=1),
+        ),
+        BoolInput(
+            name="prevent_outside",
+            display_name="Prevent Outside",
+            info="Only crawl URLs within the same domain as the root URL.",
+            value=True,
+            advanced=True,
+        ),
+        BoolInput(
+            name="use_async",
+            display_name="Use Async",
+            info="Use asynchronous loading for better performance.",
+            value=True,
+            advanced=True,
+        ),
+        DropdownInput(
+            name="format",
+            display_name="Output Format",
+            options=["Text", "HTML"],
+            value="Text",
+            advanced=True,
+        ),
+        IntInput(
+            name="timeout",
+            display_name="Timeout",
+            info="Timeout for the request in seconds.",
+            value=30,
+            advanced=True,
+        ),
+    ]
+
+    outputs = [
+        Output(display_name="Extracted Pages", name="page_results", method="fetch_content"),
+        Output(display_name="Raw Content", name="raw_results", method="fetch_content_as_message"),
+    ]
+
+    def fetch_content(self) -> DataFrame:
+        return DataFrame(data=self.fetch_url_contents())
+
+    def fetch_content_as_message(self) -> Message:
+        url_contents = self.fetch_url_contents()
+        return Message(text="\\n\\n".join([x["text"] for x in url_contents]))
+`
+      },
+      autoset_encoding: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Autoset Encoding",
+        dynamic: false,
+        info: "If enabled, automatically sets the encoding of the request.",
+        list: false,
+        list_add_label: "Add More",
+        name: "autoset_encoding",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
+      },
+      check_response_status: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Check Response Status",
+        dynamic: false,
+        info: "If enabled, checks the response status of the request.",
+        list: false,
+        list_add_label: "Add More",
+        name: "check_response_status",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: false
+      },
+      continue_on_failure: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Continue on Failure",
+        dynamic: false,
+        info: "If enabled, continues crawling even if some requests fail.",
+        list: false,
+        list_add_label: "Add More",
+        name: "continue_on_failure",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
+      },
+      filter_text_html: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Filter Text/HTML",
+        dynamic: false,
+        info: "If enabled, filters out text/css content type from the results.",
+        list: false,
+        list_add_label: "Add More",
+        name: "filter_text_html",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
+      },
+      format: {
+        _input_type: "DropdownInput",
+        advanced: true,
+        combobox: false,
+        display_name: "Output Format",
+        dynamic: false,
+        info: "Use 'Text' to extract the text from the HTML or 'HTML' for the raw HTML content.",
+        name: "format",
+        options: ["Text", "HTML"],
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "str",
+        value: "Text"
+      },
+      headers: {
+        _input_type: "TableInput",
+        advanced: true,
+        display_name: "Headers",
+        dynamic: false,
+        info: "The headers to send with the request.",
+        input_types: ["DataFrame"],
+        list: false,
+        name: "headers",
+        placeholder: "",
+        required: false,
+        show: true,
+        table_schema: [
+          { name: "key", display_name: "Header", type: "str", description: "Header name" },
+          { name: "value", display_name: "Value", type: "str", description: "Header value" }
+        ],
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "table",
+        value: [{ key: "User-Agent", value: "lfx" }]
+      },
+      max_depth: {
+        _input_type: "SliderInput",
+        advanced: false,
+        display_name: "Depth",
+        dynamic: false,
+        info: "Controls how many 'clicks' away from the initial page the crawler will go.",
+        name: "max_depth",
+        placeholder: "",
+        range_spec: { max: 5, min: 1, step: 1, step_type: "int" },
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        type: "slider",
+        value: 1
+      },
+      prevent_outside: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Prevent Outside",
+        dynamic: false,
+        info: "If enabled, only crawls URLs within the same domain as the root URL.",
+        list: false,
+        list_add_label: "Add More",
+        name: "prevent_outside",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
+      },
+      timeout: {
+        _input_type: "IntInput",
+        advanced: true,
+        display_name: "Timeout",
+        dynamic: false,
+        info: "Timeout for the request in seconds.",
+        list: false,
+        list_add_label: "Add More",
+        name: "timeout",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "int",
+        value: 30
+      },
+      urls: {
+        _input_type: "MessageTextInput",
+        advanced: false,
+        display_name: "URLs",
+        dynamic: false,
+        info: "Enter one or more URLs to crawl recursively.",
+        input_types: [],
+        is_list: true,
+        list: true,
+        list_add_label: "Add URL",
+        load_from_db: false,
+        name: "urls",
+        placeholder: "Enter a URL...",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: true,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: urls
+      },
+      use_async: {
+        _input_type: "BoolInput",
+        advanced: true,
+        display_name: "Use Async",
+        dynamic: false,
+        info: "Use asynchronous loading for better performance.",
+        list: false,
+        list_add_label: "Add More",
+        name: "use_async",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_metadata: true,
+        type: "bool",
+        value: true
+      }
+    },
+    tool_mode: false
+  };
+}
+
+// ParserComponent - Based on Blog_Writer-3.json
+function getParserComponentTemplate(nodeId: string, displayName: string = "Parser") {
+  return {
+    base_classes: ["Message"],
+    beta: false,
+    conditional_paths: [],
+    custom_fields: {},
+    description: "Converts Data or DataFrame to Message text.",
+    display_name: displayName,
+    documentation: "",
+    edited: false,
+    field_order: ["input_data", "template", "sep"],
+    frozen: false,
+    icon: "braces",
+    legacy: false,
+    lf_version: "1.4.3",
+    metadata: {
+      code_hash: generateCodeHash(),
+      dependencies: {
+        dependencies: [{ name: "lfx", version: "0.2.1" }],
+        total_dependencies: 1
+      },
+      module: "lfx.components.processing.parser.ParserComponent"
+    },
+    minimized: false,
+    output_types: [],
+    outputs: [
+      {
+        allows_loop: false,
+        cache: true,
+        display_name: "Parsed Text",
+        group_outputs: false,
+        method: "parse_data",
+        name: "parsed_text",
+        selected: "Message",
+        tool_mode: true,
+        types: ["Message"],
+        value: "__UNDEFINED__"
+      }
+    ],
+    pinned: false,
+    template: {
+      _type: "Component",
+      code: {
+        advanced: true,
+        dynamic: true,
+        fileTypes: [],
+        file_path: "",
+        info: "",
+        list: false,
+        load_from_db: false,
+        multiline: true,
+        name: "code",
+        password: false,
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        type: "code",
+        value: `from lfx.custom.custom_component.component import Component
+from lfx.io import HandleInput, MessageTextInput, Output
+from lfx.schema.message import Message
+from lfx.schema.dataframe import DataFrame
+
+
+class ParserComponent(Component):
+    display_name = "Parser"
+    description = "Converts Data or DataFrame to Message text."
+    icon = "braces"
+    name = "ParserComponent"
+
+    inputs = [
+        HandleInput(
+            name="input_data",
+            display_name="Input Data",
+            info="Data to parse into text.",
+            input_types=["DataFrame", "Data"],
+            required=True,
+        ),
+        MessageTextInput(
+            name="template",
+            display_name="Template",
+            info="Template for formatting each item.",
+            value="{text}",
+            advanced=True,
+        ),
+        MessageTextInput(
+            name="sep",
+            display_name="Separator",
+            info="Separator between items.",
+            value="\\n\\n",
+            advanced=True,
+        ),
+    ]
+
+    outputs = [
+        Output(display_name="Parsed Text", name="parsed_text", method="parse_data"),
+    ]
+
+    def parse_data(self) -> Message:
+        if isinstance(self.input_data, DataFrame):
+            texts = [str(row.get("text", row)) for row in self.input_data.data]
+            return Message(text=self.sep.join(texts))
+        return Message(text=str(self.input_data))
+`
+      },
+      input_data: {
+        _input_type: "HandleInput",
+        advanced: false,
+        display_name: "Input Data",
+        dynamic: false,
+        info: "Data to parse into text.",
+        input_types: ["DataFrame", "Data"],
+        list: false,
+        list_add_label: "Add More",
+        name: "input_data",
+        placeholder: "",
+        required: true,
+        show: true,
+        title_case: false,
+        trace_as_metadata: true,
+        type: "other",
+        value: ""
+      },
+      sep: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Separator",
+        dynamic: false,
+        info: "Separator between items.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "sep",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: "\\n\\n"
+      },
+      template: {
+        _input_type: "MessageTextInput",
+        advanced: true,
+        display_name: "Template",
+        dynamic: false,
+        info: "Template for formatting each item.",
+        input_types: ["Message"],
+        list: false,
+        load_from_db: false,
+        name: "template",
+        placeholder: "",
+        required: false,
+        show: true,
+        title_case: false,
+        tool_mode: false,
+        trace_as_input: true,
+        trace_as_metadata: true,
+        type: "str",
+        value: "{text}"
+      }
+    },
+    tool_mode: false
+  };
+}
+
 // ===============================================
 // UPDATED SYSTEM PROMPT WITH CORRECT COMPONENT TYPES
 // ===============================================
@@ -1708,6 +2256,21 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
 - Output: "messages_text" → ["Message"]
 - Use for: Chat history/memory retrieval
 
+### URLComponent
+- Type: "URLComponent"
+- Outputs:
+  - "page_results" → ["DataFrame"] (extracted page data)
+  - "raw_results" → ["Message"] (raw text content)
+- Config: { "urls": ["https://example.com"] }
+- Use for: Fetching and parsing web page content
+- Note: Output needs to go through Parser before connecting to Prompt
+
+### ParserComponent
+- Type: "ParserComponent"
+- Input: "input_data" ← ["DataFrame", "Data"] (type: "other")
+- Output: "parsed_text" → ["Message"]
+- Use for: Converting DataFrame/Data to Message text
+
 ## Connection Rules
 
 1. ChatInput.message → LanguageModelComponent.input_value (direct chat)
@@ -1717,6 +2280,8 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
 5. Prompt.prompt → LanguageModelComponent.system_message
 6. Memory.messages_text → Prompt.{memory_variable}
 7. LanguageModelComponent.text_output → ChatOutput.input_value
+8. URLComponent.page_results → ParserComponent.input_data
+9. ParserComponent.parsed_text → Prompt.{content_variable}
 
 ## Common Patterns
 
@@ -1795,7 +2360,9 @@ const TYPE_MAP: Record<string, string> = {
   "Prompt": "Prompt",
   "LanguageModelComponent": "LanguageModelComponent",
   "OpenAIModel": "LanguageModelComponent", // Map old type to new
-  "Memory": "Memory"
+  "Memory": "Memory",
+  "URLComponent": "URLComponent",
+  "ParserComponent": "ParserComponent"
 };
 
 const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
@@ -1804,7 +2371,9 @@ const OUTPUT_INFO: Record<string, { name: string; types: string[] }> = {
   "TextInput": { name: "text", types: ["Message"] },
   "Prompt": { name: "prompt", types: ["Message"] },
   "LanguageModelComponent": { name: "text_output", types: ["Message"] },
-  "Memory": { name: "messages_text", types: ["Message"] }
+  "Memory": { name: "messages_text", types: ["Message"] },
+  "URLComponent": { name: "page_results", types: ["DataFrame"] },
+  "ParserComponent": { name: "parsed_text", types: ["Message"] }
 };
 
 const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: string }>> = {
@@ -1815,7 +2384,10 @@ const INPUT_INFO: Record<string, Record<string, { types: string[]; fieldType: st
     "input_value": { types: ["Message"], fieldType: "str" },
     "system_message": { types: ["Message"], fieldType: "str" }
   },
-  "Prompt": {}
+  "Prompt": {},
+  "ParserComponent": {
+    "input_data": { types: ["DataFrame", "Data"], fieldType: "other" }
+  }
 };
 
 // ===============================================
@@ -1871,6 +2443,12 @@ function buildWorkflowJson(plan: any) {
         break;
       case "Memory":
         nodeData = getMemoryTemplate(nodeId, displayName);
+        break;
+      case "URLComponent":
+        nodeData = getURLComponentTemplate(nodeId, displayName, comp.config?.urls || []);
+        break;
+      case "ParserComponent":
+        nodeData = getParserComponentTemplate(nodeId, displayName);
         break;
       default:
         console.log(`Unknown component type: ${comp.type}`);
