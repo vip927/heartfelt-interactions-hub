@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Loader2, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,10 +11,12 @@ interface Message {
   content: string;
 }
 
-interface ChatInterfaceProps {
+interface CreateViewProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   isLoading: boolean;
+  onBack: () => void;
+  initialPrompt?: string;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -25,16 +27,26 @@ const EXAMPLE_PROMPTS = [
   "Create an SEO keyword generator with structured output",
 ];
 
-export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterfaceProps) {
-  const [input, setInput] = useState('');
+export function CreateView({ messages, onSendMessage, isLoading, onBack, initialPrompt }: CreateViewProps) {
+  const [input, setInput] = useState(initialPrompt || '');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasAutoSent = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Auto-send initial prompt if provided
+  useEffect(() => {
+    if (initialPrompt && !hasAutoSent.current && messages.length === 0) {
+      hasAutoSent.current = true;
+      onSendMessage(initialPrompt);
+      setInput('');
+    }
+  }, [initialPrompt, messages.length, onSendMessage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +65,26 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
 
   return (
     <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-border flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={onBack}
+          className="flex-shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Create New Workflow</h2>
+          <p className="text-sm text-muted-foreground">Describe what you want to build</p>
+        </div>
+      </div>
+
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-6" ref={scrollRef}>
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+          <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
             <div className="mb-6">
               <div className="w-16 h-16 rounded-2xl gradient-brand flex items-center justify-center mb-4 mx-auto">
                 <Sparkles className="w-8 h-8 text-white" />
@@ -65,7 +93,8 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
                 AI Workflow Builder
               </h2>
               <p className="text-muted-foreground max-w-md">
-                Describe the workflow you want to build, and I'll generate it for you automatically.
+                Describe the workflow you want to build, and I'll generate it for you. 
+                It will automatically open in the visual builder.
               </p>
             </div>
             
@@ -85,7 +114,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
             </div>
           </div>
         ) : (
-          <div className="space-y-4 pb-4">
+          <div className="space-y-4 pb-4 max-w-3xl mx-auto">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -122,7 +151,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
 
       {/* Input Area */}
       <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="flex gap-3">
+        <form onSubmit={handleSubmit} className="flex gap-3 max-w-3xl mx-auto">
           <Textarea
             ref={textareaRef}
             value={input}

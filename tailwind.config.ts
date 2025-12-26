@@ -57,12 +57,13 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        // Langflow brand colors
-        langflow: {
-          purple: "hsl(var(--langflow-purple))",
-          blue: "hsl(var(--langflow-blue))",
-          green: "hsl(var(--langflow-green))",
-          orange: "hsl(var(--langflow-orange))",
+        // Brand colors
+        brand: {
+          primary: "hsl(var(--brand-primary))",
+          secondary: "hsl(var(--brand-secondary))",
+          accent: "hsl(var(--brand-accent))",
+          success: "hsl(var(--brand-success))",
+          warning: "hsl(var(--brand-warning))",
         },
       },
       borderRadius: {

@@ -1,13 +1,16 @@
-import { RotateCcw, Moon, Sun, Workflow, LogOut, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { ChatInterface } from '@/components/ChatInterface';
-import { JsonOutputPanel } from '@/components/JsonOutputPanel';
+import { Loader2 } from 'lucide-react';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { TopBar } from '@/components/layout/TopBar';
+import { WorkflowsView } from '@/components/views/WorkflowsView';
+import { CreateView } from '@/components/views/CreateView';
 import { useWorkflowGenerator } from '@/hooks/useWorkflowGenerator';
 import { useWorkflows } from '@/hooks/useWorkflows';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+
+type ViewType = 'home' | 'workflows' | 'create';
 
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
@@ -15,7 +18,10 @@ const Index = () => {
   const { user, loading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  
   const [isDark, setIsDark] = useState(false);
+  const [activeView, setActiveView] = useState<ViewType>('workflows');
+  const [templatePrompt, setTemplatePrompt] = useState<string | undefined>();
 
   useEffect(() => {
     // Check system preference
@@ -33,39 +39,39 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  // Auto-save workflow when generated and import to Langflow
+  // Auto-save workflow when generated and import to builder
   useEffect(() => {
     if (workflowState.workflow && workflowState.isValid) {
       const workflowName = (workflowState.workflow as any).name || 'Untitled Workflow';
       const description = workflowState.explanation?.overview || '';
       
-      // Open Langflow window immediately (prevents popup blocker)
-      const langflowWindow = window.open('about:blank', '_blank');
+      // Open builder window immediately (prevents popup blocker)
+      const builderWindow = window.open('about:blank', '_blank');
       
-      // Save workflow and import to Langflow
+      // Save workflow and import to builder
       saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
         .then(async (saved) => {
           if (saved) {
-            // Import to Langflow and get the flow URL
+            // Import and get the flow URL
             const flowUrl = await importToLangflow(workflowState.workflow!);
             
-            if (flowUrl && langflowWindow) {
+            if (flowUrl && builderWindow) {
               // Navigate to the imported flow
-              langflowWindow.location.href = flowUrl;
+              builderWindow.location.href = flowUrl;
               
               toast({
-                title: 'Workflow imported!',
-                description: 'Opening in Langflow visual builder...',
+                title: 'Workflow created!',
+                description: 'Opening in visual builder...',
               });
-            } else if (langflowWindow) {
+            } else if (builderWindow) {
               // Fallback: close the blank window if import failed
-              langflowWindow.close();
+              builderWindow.close();
             }
             
             // Refresh workflows list
             refreshWorkflows();
-          } else if (langflowWindow) {
-            langflowWindow.close();
+          } else if (builderWindow) {
+            builderWindow.close();
           }
         });
     }
@@ -93,6 +99,26 @@ const Index = () => {
     }
   };
 
+  const handleViewChange = (view: ViewType) => {
+    if (view === 'create') {
+      clearChat();
+      setTemplatePrompt(undefined);
+    }
+    setActiveView(view);
+  };
+
+  const handleCreateNew = () => {
+    clearChat();
+    setTemplatePrompt(undefined);
+    setActiveView('create');
+  };
+
+  const handleUseTemplate = (prompt: string) => {
+    clearChat();
+    setTemplatePrompt(prompt);
+    setActiveView('create');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -106,74 +132,45 @@ const Index = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-langflow-purple to-langflow-blue flex items-center justify-center">
-            <Workflow className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">Langflow Generator</h1>
-            <p className="text-xs text-muted-foreground">AI-powered workflow builder</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground hidden sm:block">
-            {user.email}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearChat}
-            className="gap-2"
-            disabled={messages.length === 0}
-          >
-            <RotateCcw className="w-4 h-4" />
-            Clear
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={toggleTheme}
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleSignOut}
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
-        </div>
-      </header>
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* Sidebar */}
+      <div className="relative">
+        <Sidebar 
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          onSignOut={handleSignOut}
+          userEmail={user.email}
+        />
+      </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Chat Panel */}
-        <div className="w-1/2 border-r border-border bg-card">
-          <ChatInterface
-            messages={messages}
-            onSendMessage={sendMessage}
-            isLoading={isLoading}
-          />
-        </div>
-
-        {/* JSON Output Panel */}
-        <div className="w-1/2 bg-background">
-          <JsonOutputPanel
-            workflow={workflowState.workflow}
-            rawContent={workflowState.rawContent}
-            isValid={workflowState.isValid}
-            explanation={workflowState.explanation}
-            savedWorkflows={workflows}
-            isLoadingWorkflows={isLoadingWorkflows}
-            onDeleteWorkflow={deleteWorkflow}
-            onImportToLangflow={importToLangflow}
-          />
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar 
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          userEmail={user.email}
+        />
+        
+        <main className="flex-1 overflow-hidden bg-background">
+          {activeView === 'create' ? (
+            <CreateView
+              messages={messages}
+              onSendMessage={sendMessage}
+              isLoading={isLoading}
+              onBack={() => setActiveView('workflows')}
+              initialPrompt={templatePrompt}
+            />
+          ) : (
+            <WorkflowsView
+              workflows={workflows}
+              isLoading={isLoadingWorkflows}
+              onDelete={deleteWorkflow}
+              onImportToBuilder={importToLangflow}
+              onCreateNew={handleCreateNew}
+              onUseTemplate={handleUseTemplate}
+            />
+          )}
+        </main>
       </div>
     </div>
   );
