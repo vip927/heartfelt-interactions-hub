@@ -28,6 +28,7 @@ interface JsonOutputPanelProps {
   savedWorkflows: SavedWorkflow[];
   isLoadingWorkflows: boolean;
   onDeleteWorkflow: (id: string) => void;
+  onImportToLangflow: (workflowJson: object) => Promise<string | null>;
 }
 
 export function JsonOutputPanel({ 
@@ -37,7 +38,8 @@ export function JsonOutputPanel({
   explanation,
   savedWorkflows,
   isLoadingWorkflows,
-  onDeleteWorkflow 
+  onDeleteWorkflow,
+  onImportToLangflow 
 }: JsonOutputPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
@@ -177,6 +179,7 @@ export function JsonOutputPanel({
           workflows={savedWorkflows}
           isLoading={isLoadingWorkflows}
           onDelete={onDeleteWorkflow}
+          onImportToLangflow={onImportToLangflow}
         />
       </TabsContent>
     </Tabs>

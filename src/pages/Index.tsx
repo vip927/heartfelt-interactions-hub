@@ -9,11 +9,9 @@ import { useWorkflows } from '@/hooks/useWorkflows';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
-const LANGFLOW_URL = 'http://143.110.254.19:7860';
-
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
-  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, refreshWorkflows } = useWorkflows();
+  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, importToLangflow, refreshWorkflows } = useWorkflows();
   const { user, loading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -35,26 +33,28 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  // Auto-save workflow when generated and open in Langflow
+  // Auto-save workflow when generated and import to Langflow
   useEffect(() => {
     if (workflowState.workflow && workflowState.isValid) {
       const workflowName = (workflowState.workflow as any).name || 'Untitled Workflow';
       const description = workflowState.explanation?.overview || '';
       
-      // Save workflow
+      // Save workflow and import to Langflow
       saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
-        .then((saved) => {
+        .then(async (saved) => {
           if (saved) {
-            // Open Langflow in a new tab
-            window.open(LANGFLOW_URL, '_blank');
+            // Import to Langflow and get the flow URL
+            const flowUrl = await importToLangflow(workflowState.workflow!);
             
-            // Copy JSON to clipboard for easy import
-            navigator.clipboard.writeText(JSON.stringify(workflowState.workflow, null, 2));
-            
-            toast({
-              title: 'Ready to import!',
-              description: 'Langflow opened in a new tab. Workflow JSON copied to clipboard.',
-            });
+            if (flowUrl) {
+              // Open the imported flow directly in Langflow
+              window.open(flowUrl, '_blank');
+              
+              toast({
+                title: 'Workflow imported!',
+                description: 'Opening in Langflow visual builder...',
+              });
+            }
             
             // Refresh workflows list
             refreshWorkflows();
@@ -163,6 +163,7 @@ const Index = () => {
             savedWorkflows={workflows}
             isLoadingWorkflows={isLoadingWorkflows}
             onDeleteWorkflow={deleteWorkflow}
+            onImportToLangflow={importToLangflow}
           />
         </div>
       </div>
