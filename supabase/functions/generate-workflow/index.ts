@@ -2632,7 +2632,20 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
       "to": "ComponentType-suffix", 
       "to_input": "input_field_name"
     }
-  ]
+  ],
+  "explanation": {
+    "overview": "A 2-3 sentence summary of what this workflow does and its main purpose.",
+    "components": [
+      {
+        "name": "Display Name",
+        "type": "ComponentType",
+        "purpose": "What this component does in the workflow",
+        "configuration": "Key configuration details if any"
+      }
+    ],
+    "dataFlow": "Describe how data flows through the workflow step by step, e.g., 'User message → Prompt Template → LLM → Chat Output'",
+    "expectedOutput": "What the user should expect as output when running this workflow"
+  }
 }
 
 ## Available Components & Their Outputs/Inputs
@@ -2794,6 +2807,8 @@ IMPORTANT: Output ONLY valid JSON with this exact structure:
     { "from": "LanguageModelComponent-llm04", "from_output": "text_output", "to": "ChatOutput-out05", "to_input": "input_value" }
   ]
 }
+
+IMPORTANT: Always include the "explanation" field with overview, components array, dataFlow, and expectedOutput. This helps users understand their workflow.
 
 RESPOND WITH ONLY VALID JSON. NO EXPLANATIONS.`;
 
@@ -3056,10 +3071,14 @@ serve(async (req) => {
       console.error('Failed to parse/build workflow:', e);
     }
 
+    // Extract explanation from the plan
+    const explanation = plan?.explanation || null;
+
     return new Response(JSON.stringify({ 
       content: generatedContent,
       workflow,
-      isValid
+      isValid,
+      explanation
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

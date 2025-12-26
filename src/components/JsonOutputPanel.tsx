@@ -1,17 +1,31 @@
 import { useState } from 'react';
-import { Copy, Download, Check, FileJson, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Copy, Download, Check, FileJson, AlertCircle, CheckCircle2, BookOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { ExplanationPanel } from '@/components/ExplanationPanel';
+
+interface WorkflowExplanation {
+  overview: string;
+  components: Array<{
+    name: string;
+    type: string;
+    purpose: string;
+    configuration: string;
+  }>;
+  dataFlow: string;
+  expectedOutput: string;
+}
 
 interface JsonOutputPanelProps {
   workflow: object | null;
   rawContent: string;
   isValid: boolean;
+  explanation?: WorkflowExplanation | null;
 }
 
-export function JsonOutputPanel({ workflow, rawContent, isValid }: JsonOutputPanelProps) {
+export function JsonOutputPanel({ workflow, rawContent, isValid, explanation }: JsonOutputPanelProps) {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
 
@@ -71,12 +85,20 @@ export function JsonOutputPanel({ workflow, rawContent, isValid }: JsonOutputPan
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
+    <Tabs defaultValue="json" className="flex flex-col h-full">
+      {/* Header with Tabs */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <TabsList className="bg-secondary/50">
+          <TabsTrigger value="json" className="gap-2">
+            <FileJson className="w-4 h-4" />
+            JSON
+          </TabsTrigger>
+          <TabsTrigger value="guide" className="gap-2">
+            <BookOpen className="w-4 h-4" />
+            Guide
+          </TabsTrigger>
+        </TabsList>
         <div className="flex items-center gap-2">
-          <FileJson className="w-5 h-5 text-langflow-purple" />
-          <span className="font-medium text-foreground">Workflow JSON</span>
           {isValid ? (
             <span className="flex items-center gap-1 text-xs text-langflow-green bg-langflow-green/10 px-2 py-0.5 rounded-full">
               <CheckCircle2 className="w-3 h-3" />
@@ -88,8 +110,6 @@ export function JsonOutputPanel({ workflow, rawContent, isValid }: JsonOutputPan
               Check format
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -120,15 +140,21 @@ export function JsonOutputPanel({ workflow, rawContent, isValid }: JsonOutputPan
         </div>
       </div>
 
-      {/* JSON Content */}
-      <ScrollArea className="flex-1">
-        <pre className="p-4 text-sm font-mono overflow-x-auto">
-          <code className="text-foreground">
-            {highlightJson(displayContent)}
-          </code>
-        </pre>
-      </ScrollArea>
-    </div>
+      {/* Tab Content */}
+      <TabsContent value="json" className="flex-1 mt-0 overflow-hidden">
+        <ScrollArea className="h-full">
+          <pre className="p-4 text-sm font-mono overflow-x-auto">
+            <code className="text-foreground">
+              {highlightJson(displayContent)}
+            </code>
+          </pre>
+        </ScrollArea>
+      </TabsContent>
+
+      <TabsContent value="guide" className="flex-1 mt-0 overflow-hidden">
+        <ExplanationPanel explanation={explanation || null} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
