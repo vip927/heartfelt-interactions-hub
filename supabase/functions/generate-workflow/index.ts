@@ -2221,7 +2221,7 @@ function getFileComponentTemplate(nodeId: string, displayName: string = "Read Fi
         dependencies: [{ name: "lfx", version: "0.2.1" }],
         total_dependencies: 1
       },
-      module: "lfx.components.data.file.FileComponent"
+      module: "langflow.components.data.file.FileComponent"
     },
     minimized: false,
     output_types: [],
@@ -2270,8 +2270,14 @@ function getFileComponentTemplate(nodeId: string, displayName: string = "Read Fi
         show: true,
         title_case: false,
         type: "code",
-        value: `from pathlib import Path
+        value: `from __future__ import annotations
+
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
+
 from lfx.base.data.base_file import BaseFileComponent
+from lfx.base.data.utils import TEXT_FILE_TYPES, parallel_load_data, parse_text_file_to_data
 from lfx.inputs.inputs import DropdownInput, MessageTextInput, StrInput
 from lfx.io import BoolInput, FileInput, IntInput, Output
 from lfx.schema.data import Data
@@ -2280,6 +2286,8 @@ from lfx.schema.message import Message
 
 
 class FileComponent(BaseFileComponent):
+    """File component for reading files including PDFs, documents, and images."""
+
     display_name = "Read File"
     description = "Loads content from one or more files."
     documentation = "https://docs.langflow.org/read-file"
@@ -2287,25 +2295,29 @@ class FileComponent(BaseFileComponent):
     name = "File"
     add_tool_output = True
 
+    TEXT_EXTENSIONS = TEXT_FILE_TYPES
+
     VALID_EXTENSIONS = [
         "csv", "json", "pdf", "txt", "md", "mdx", "yaml", "yml", "xml",
         "html", "htm", "docx", "py", "sh", "sql", "js", "ts", "tsx",
         "jpg", "jpeg", "png", "bmp", "tiff", "webp", "pptx", "xlsx", "xls"
     ]
 
+    _base_inputs = deepcopy(BaseFileComponent.get_base_inputs())
+
+    for input_item in _base_inputs:
+        if isinstance(input_item, FileInput) and input_item.name == "path":
+            input_item.real_time_refresh = True
+            input_item.tool_mode = False
+            input_item.required = False
+            break
+
     inputs = [
-        FileInput(
-            name="path",
-            display_name="Files",
-            file_types=VALID_EXTENSIONS,
-            info="Upload one or more files to read.",
-            is_list=True,
-            required=False,
-        ),
+        *_base_inputs,
         StrInput(
             name="file_path_str",
             display_name="File Path",
-            info="Path to the file to read (used in tool mode).",
+            info="Path to the file to read. Used when component is called as a tool.",
             show=False,
             advanced=True,
             tool_mode=True,
@@ -2315,6 +2327,7 @@ class FileComponent(BaseFileComponent):
             name="advanced_mode",
             display_name="Advanced Parser",
             value=False,
+            real_time_refresh=True,
             info="Enable advanced document processing with Docling for PDFs, images, and office documents.",
             show=True,
         ),
@@ -2325,6 +2338,7 @@ class FileComponent(BaseFileComponent):
             options=["standard", "vlm"],
             value="standard",
             advanced=True,
+            real_time_refresh=True,
         ),
         DropdownInput(
             name="ocr_engine",
@@ -2334,6 +2348,37 @@ class FileComponent(BaseFileComponent):
             value="easyocr",
             show=False,
             advanced=True,
+        ),
+        StrInput(
+            name="md_image_placeholder",
+            display_name="Image placeholder",
+            info="Specify the image placeholder for markdown exports.",
+            value="<!-- image -->",
+            advanced=True,
+            show=False,
+        ),
+        StrInput(
+            name="md_page_break_placeholder",
+            display_name="Page break placeholder",
+            info="Add this placeholder between pages in the markdown output.",
+            value="",
+            advanced=True,
+            show=False,
+        ),
+        MessageTextInput(
+            name="doc_key",
+            display_name="Doc Key",
+            info="The key to use for the DoclingDocument column.",
+            value="doc",
+            advanced=True,
+            show=False,
+        ),
+        BoolInput(
+            name="use_multithreading",
+            display_name="[Deprecated] Use Multithreading",
+            advanced=True,
+            value=True,
+            info="Set 'Processing Concurrency' greater than 1 to enable multithreading.",
         ),
         IntInput(
             name="concurrency_multithreading",
@@ -2345,7 +2390,7 @@ class FileComponent(BaseFileComponent):
         BoolInput(
             name="markdown",
             display_name="Markdown Export",
-            info="Export processed documents to Markdown format.",
+            info="Export processed documents to Markdown format. Only available when advanced mode is enabled.",
             value=False,
             show=False,
         ),
@@ -2355,11 +2400,79 @@ class FileComponent(BaseFileComponent):
         Output(display_name="Raw Content", name="message", method="load_files_message", tool_mode=True),
     ]
 
+    def _validate_and_resolve_paths(self) -> list[BaseFileComponent.BaseFile]:
+        """Handle file_path_str input from tool mode."""
+        file_path_str = getattr(self, "file_path_str", None)
+        if file_path_str:
+            resolved_path = Path(self.resolve_path(file_path_str))
+            if not resolved_path.exists():
+                msg = f"File or directory not found: {file_path_str}"
+                self.log(msg)
+                if not self.silent_errors:
+                    raise ValueError(msg)
+                return []
+
+            data_obj = Data(data={self.SERVER_FILE_PATH_FIELDNAME: str(resolved_path)})
+            return [BaseFileComponent.BaseFile(data_obj, resolved_path, delete_after_processing=False)]
+
+        return super()._validate_and_resolve_paths()
+
+    def process_files(
+        self,
+        file_list: list[BaseFileComponent.BaseFile],
+    ) -> list[BaseFileComponent.BaseFile]:
+        """Process input files using standard text parsing.
+
+        This is the required abstract method from BaseFileComponent.
+        """
+        if not file_list:
+            msg = "No files to process."
+            raise ValueError(msg)
+
+        def process_file_standard(file_path: str, *, silent_errors: bool = False) -> Data | None:
+            try:
+                return parse_text_file_to_data(file_path, silent_errors=silent_errors)
+            except FileNotFoundError as e:
+                self.log(f"File not found: {file_path}. Error: {e}")
+                if not silent_errors:
+                    raise
+                return None
+            except Exception as e:
+                self.log(f"Unexpected error processing {file_path}: {e}")
+                if not silent_errors:
+                    raise
+                return None
+
+        concurrency = 1 if not getattr(self, 'use_multithreading', True) else max(1, getattr(self, 'concurrency_multithreading', 1))
+
+        file_paths = [str(f.path) for f in file_list]
+        self.log(f"Starting parallel processing of {len(file_paths)} files with concurrency: {concurrency}.")
+        my_data = parallel_load_data(
+            file_paths,
+            silent_errors=self.silent_errors,
+            load_function=process_file_standard,
+            max_concurrency=concurrency,
+        )
+        return self.rollup_data(file_list, my_data)
+
     def load_files_message(self) -> Message:
+        """Load files and return as Message."""
         result = self.load_files()
-        if hasattr(result, 'text'):
-            return Message(text=result.text)
-        return Message(text=str(result))
+        if result.empty:
+            msg = "Could not extract content from the provided file(s)."
+            raise ValueError(msg)
+
+        if "error" in result.columns:
+            errors = result["error"].dropna().tolist()
+            if errors and not any(col in result.columns for col in ["text", "doc", "exported_content"]):
+                raise ValueError(errors[0])
+
+        if "text" in result.columns and not result["text"].isna().all():
+            text_values = result["text"].dropna().tolist()
+            if text_values:
+                return Message(text=str(text_values[0]))
+
+        return Message(text=str(result.to_dict()))
 `
       },
       path: {
