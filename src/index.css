@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --background: 220 20% 97%;
+    --background: 0 0% 98%;
     --foreground: 220 20% 10%;
 
     --card: 0 0% 100%;
@@ -15,41 +15,42 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 10%;
 
-    --primary: 262 83% 58%;
+    --primary: 162 72% 45%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 92%;
+    --secondary: 220 14% 96%;
     --secondary-foreground: 220 20% 20%;
 
-    --muted: 220 14% 92%;
+    --muted: 220 14% 96%;
     --muted-foreground: 220 10% 46%;
 
-    --accent: 262 83% 58%;
+    --accent: 162 72% 45%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 14% 88%;
-    --input: 220 14% 88%;
-    --ring: 262 83% 58%;
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
+    --ring: 162 72% 45%;
 
     --radius: 0.75rem;
 
-    /* Langflow brand colors */
-    --langflow-purple: 262 83% 58%;
-    --langflow-blue: 217 91% 60%;
-    --langflow-green: 142 76% 36%;
-    --langflow-orange: 25 95% 53%;
+    /* Brand colors */
+    --brand-primary: 162 72% 45%;
+    --brand-secondary: 280 65% 60%;
+    --brand-accent: 200 90% 50%;
+    --brand-success: 142 76% 36%;
+    --brand-warning: 25 95% 53%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 220 20% 14%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 162 72% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 20%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 220 20% 20%;
+    --sidebar-ring: 162 72% 45%;
   }
 
   .dark {
@@ -62,7 +63,7 @@
     --popover: 222 47% 11%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 262 83% 65%;
+    --primary: 162 72% 50%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 217 33% 17%;
@@ -71,7 +72,7 @@
     --muted: 217 33% 17%;
     --muted-foreground: 215 20% 65%;
 
-    --accent: 262 83% 65%;
+    --accent: 162 72% 50%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 63% 31%;
@@ -79,22 +80,23 @@
 
     --border: 217 33% 20%;
     --input: 217 33% 20%;
-    --ring: 262 83% 65%;
+    --ring: 162 72% 50%;
 
-    /* Langflow brand colors (dark mode) */
-    --langflow-purple: 262 83% 65%;
-    --langflow-blue: 217 91% 65%;
-    --langflow-green: 142 76% 46%;
-    --langflow-orange: 25 95% 58%;
+    /* Brand colors (dark mode) */
+    --brand-primary: 162 72% 50%;
+    --brand-secondary: 280 65% 65%;
+    --brand-accent: 200 90% 55%;
+    --brand-success: 142 76% 46%;
+    --brand-warning: 25 95% 58%;
 
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 162 72% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 222 47% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 222 47% 12%;
+    --sidebar-ring: 162 72% 50%;
   }
 }
 
@@ -105,7 +107,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   code, pre {
@@ -114,7 +116,7 @@
 }
 
 @layer utilities {
-  .gradient-langflow {
-    @apply bg-gradient-to-r from-[hsl(var(--langflow-purple))] to-[hsl(var(--langflow-blue))];
+  .gradient-brand {
+    @apply bg-gradient-to-r from-[hsl(var(--brand-primary))] to-[hsl(var(--brand-accent))];
   }
 }
