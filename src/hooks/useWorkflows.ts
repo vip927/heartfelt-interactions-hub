@@ -4,6 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import type { Json } from '@/integrations/supabase/types';
 
+const LANGFLOW_URL = 'http://143.110.254.19:7860';
+
 interface WorkflowExplanation {
   overview: string;
   components: Array<{
@@ -144,6 +146,47 @@ export function useWorkflows() {
     }
   }, [toast]);
 
+  const importToLangflow = useCallback(async (workflowJson: object): Promise<string | null> => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-to-langflow`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            workflow: workflowJson,
+            langflowUrl: LANGFLOW_URL,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to import to Langflow');
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.flowUrl) {
+        return data.flowUrl;
+      }
+      
+      throw new Error('Import succeeded but no flow URL returned');
+    } catch (error) {
+      console.error('Error importing to Langflow:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: 'Import failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      return null;
+    }
+  }, [toast]);
+
   useEffect(() => {
     fetchWorkflows();
   }, [fetchWorkflows]);
@@ -153,6 +196,7 @@ export function useWorkflows() {
     isLoading,
     saveWorkflow,
     deleteWorkflow,
+    importToLangflow,
     refreshWorkflows: fetchWorkflows,
   };
 }

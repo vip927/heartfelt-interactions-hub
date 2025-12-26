@@ -21,25 +21,35 @@ import {
 } from '@/components/ui/alert-dialog';
 import { SavedWorkflow } from '@/hooks/useWorkflows';
 import { format } from 'date-fns';
-
-const LANGFLOW_URL = 'http://143.110.254.19:7860';
+import { useToast } from '@/hooks/use-toast';
 
 interface MyWorkflowsPanelProps {
   workflows: SavedWorkflow[];
   isLoading: boolean;
   onDelete: (id: string) => void;
+  onImportToLangflow: (workflowJson: object) => Promise<string | null>;
 }
 
-export function MyWorkflowsPanel({ workflows, isLoading, onDelete }: MyWorkflowsPanelProps) {
+export function MyWorkflowsPanel({ workflows, isLoading, onDelete, onImportToLangflow }: MyWorkflowsPanelProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState<SavedWorkflow | null>(null);
   const [workflowToDelete, setWorkflowToDelete] = useState<SavedWorkflow | null>(null);
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  const openInLangflow = (workflow: SavedWorkflow) => {
-    // Open Langflow in a new tab - user can import the workflow there
-    const langflowWindow = window.open(LANGFLOW_URL, '_blank');
-    
-    // Copy workflow to clipboard for easy import
-    navigator.clipboard.writeText(JSON.stringify(workflow.workflow_json, null, 2));
+  const openInLangflow = async (workflow: SavedWorkflow) => {
+    setImportingId(workflow.id);
+    try {
+      const flowUrl = await onImportToLangflow(workflow.workflow_json);
+      if (flowUrl) {
+        window.open(flowUrl, '_blank');
+        toast({
+          title: 'Workflow imported!',
+          description: 'Opening in Langflow visual builder...',
+        });
+      }
+    } finally {
+      setImportingId(null);
+    }
   };
 
   if (isLoading) {
@@ -104,8 +114,13 @@ export function MyWorkflowsPanel({ workflows, isLoading, onDelete }: MyWorkflows
                     size="icon"
                     onClick={() => openInLangflow(workflow)}
                     title="Open in Langflow"
+                    disabled={importingId === workflow.id}
                   >
-                    <ExternalLink className="w-4 h-4" />
+                    {importingId === workflow.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="w-4 h-4" />
+                    )}
                   </Button>
                   <Button
                     variant="ghost"
