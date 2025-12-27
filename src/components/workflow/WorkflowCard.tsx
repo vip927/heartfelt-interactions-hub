@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { MoreVertical, Trash2, ExternalLink, Eye, Loader2 } from 'lucide-react';
+import { MoreVertical, Trash2, ExternalLink, Eye, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { format } from 'date-fns';
@@ -15,10 +15,13 @@ interface WorkflowCardProps {
   name: string;
   description?: string | null;
   createdAt: string;
+  langflowFlowId?: string | null;
   onView: () => void;
   onOpen: () => void;
+  onSync?: () => void;
   onDelete: () => void;
   isImporting?: boolean;
+  isSyncing?: boolean;
 }
 
 const CARD_COLORS = [
@@ -33,11 +36,14 @@ export function WorkflowCard({
   id,
   name, 
   description, 
-  createdAt, 
+  createdAt,
+  langflowFlowId,
   onView, 
-  onOpen, 
+  onOpen,
+  onSync,
   onDelete,
-  isImporting 
+  isImporting,
+  isSyncing,
 }: WorkflowCardProps) {
   // Generate consistent color based on id
   const colorIndex = id.charCodeAt(0) % CARD_COLORS.length;
@@ -93,6 +99,17 @@ export function WorkflowCard({
                     )}
                     Open in Builder
                   </DropdownMenuItem>
+                  {langflowFlowId && onSync && (
+                    <DropdownMenuItem onClick={onSync} disabled={isSyncing}>
+                      {isSyncing ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Sync Changes
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={onDelete}
                     className="text-destructive focus:text-destructive"

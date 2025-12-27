@@ -14,7 +14,7 @@ type ViewType = 'home' | 'workflows' | 'create';
 
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
-  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, importToLangflow, refreshWorkflows } = useWorkflows();
+  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, importToLangflow, syncFromLangflow, refreshWorkflows } = useWorkflows();
   const { user, loading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -52,12 +52,12 @@ const Index = () => {
       saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
         .then(async (saved) => {
           if (saved) {
-            // Import and get the flow URL
-            const flowUrl = await importToLangflow(workflowState.workflow!);
+            // Import and get the flow URL and ID
+            const result = await importToLangflow(workflowState.workflow!);
             
-            if (flowUrl && builderWindow) {
+            if (result && builderWindow) {
               // Navigate to the imported flow
-              builderWindow.location.href = flowUrl;
+              builderWindow.location.href = result.flowUrl;
               
               toast({
                 title: 'Workflow created!',
@@ -166,6 +166,7 @@ const Index = () => {
               isLoading={isLoadingWorkflows}
               onDelete={deleteWorkflow}
               onImportToBuilder={importToLangflow}
+              onSyncFromBuilder={syncFromLangflow}
               onCreateNew={handleCreateNew}
               onUseTemplate={handleUseTemplate}
             />
