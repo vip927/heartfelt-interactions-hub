@@ -1,1 +1,13 @@
 project_id = "rtwavoxavwaslqhsoonr"
+
+[functions.generate-workflow]
+verify_jwt = false
+
+[functions.import-to-langflow]
+verify_jwt = false
+
+[functions.provision-langflow-folder]
+verify_jwt = false
+
+[functions.sync-from-langflow]
+verify_jwt = false

@@ -30,7 +30,8 @@ interface WorkflowsViewProps {
   workflows: SavedWorkflow[];
   isLoading: boolean;
   onDelete: (id: string) => void;
-  onImportToBuilder: (workflowJson: object) => Promise<string | null>;
+  onImportToBuilder: (workflowJson: object) => Promise<{ flowUrl: string; flowId: string } | null>;
+  onSyncFromBuilder: (workflowId: string, langflowFlowId: string) => Promise<boolean>;
   onCreateNew: () => void;
   onUseTemplate: (prompt: string) => void;
 }
@@ -71,6 +72,7 @@ export function WorkflowsView({
   isLoading, 
   onDelete, 
   onImportToBuilder,
+  onSyncFromBuilder,
   onCreateNew,
   onUseTemplate
 }: WorkflowsViewProps) {
@@ -78,6 +80,7 @@ export function WorkflowsView({
   const [selectedWorkflow, setSelectedWorkflow] = useState<SavedWorkflow | null>(null);
   const [workflowToDelete, setWorkflowToDelete] = useState<SavedWorkflow | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const filteredWorkflows = workflows.filter(w => 
@@ -88,9 +91,9 @@ export function WorkflowsView({
   const handleOpenInBuilder = async (workflow: SavedWorkflow) => {
     setImportingId(workflow.id);
     try {
-      const flowUrl = await onImportToBuilder(workflow.workflow_json);
-      if (flowUrl) {
-        window.open(flowUrl, '_blank');
+      const result = await onImportToBuilder(workflow.workflow_json);
+      if (result) {
+        window.open(result.flowUrl, '_blank');
         toast({
           title: 'Workflow opened!',
           description: 'Opening in visual builder...',
@@ -98,6 +101,24 @@ export function WorkflowsView({
       }
     } finally {
       setImportingId(null);
+    }
+  };
+
+  const handleSyncFromBuilder = async (workflow: SavedWorkflow) => {
+    if (!workflow.langflow_flow_id) {
+      toast({
+        title: 'Cannot sync',
+        description: 'This workflow has not been opened in the builder yet.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSyncingId(workflow.id);
+    try {
+      await onSyncFromBuilder(workflow.id, workflow.langflow_flow_id);
+    } finally {
+      setSyncingId(null);
     }
   };
 
@@ -186,10 +207,13 @@ export function WorkflowsView({
                       name={workflow.name}
                       description={workflow.description}
                       createdAt={workflow.created_at}
+                      langflowFlowId={workflow.langflow_flow_id}
                       onView={() => setSelectedWorkflow(workflow)}
                       onOpen={() => handleOpenInBuilder(workflow)}
+                      onSync={() => handleSyncFromBuilder(workflow)}
                       onDelete={() => setWorkflowToDelete(workflow)}
                       isImporting={importingId === workflow.id}
+                      isSyncing={syncingId === workflow.id}
                     />
                   ))}
                 </div>

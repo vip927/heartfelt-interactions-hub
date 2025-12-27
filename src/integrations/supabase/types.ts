@@ -19,6 +19,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           id: string
+          langflow_folder_id: string | null
           updated_at: string
           user_id: string
           username: string | null
@@ -27,6 +28,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          langflow_folder_id?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
@@ -35,6 +37,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           id?: string
+          langflow_folder_id?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
@@ -47,6 +50,7 @@ export type Database = {
           description: string | null
           explanation: Json | null
           id: string
+          langflow_flow_id: string | null
           name: string
           updated_at: string
           user_id: string
@@ -57,6 +61,7 @@ export type Database = {
           description?: string | null
           explanation?: Json | null
           id?: string
+          langflow_flow_id?: string | null
           name: string
           updated_at?: string
           user_id: string
@@ -67,6 +72,7 @@ export type Database = {
           description?: string | null
           explanation?: Json | null
           id?: string
+          langflow_flow_id?: string | null
           name?: string
           updated_at?: string
           user_id?: string

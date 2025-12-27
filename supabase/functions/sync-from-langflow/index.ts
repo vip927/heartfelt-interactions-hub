@@ -14,68 +14,61 @@ serve(async (req) => {
   }
 
   try {
-    const { workflow, langflowUrl, folderId } = await req.json();
+    const { flowId } = await req.json();
 
-    const targetUrl = langflowUrl || LANGFLOW_URL;
-
-    if (!workflow) {
+    if (!flowId) {
       return new Response(
-        JSON.stringify({ error: 'Missing workflow' }),
+        JSON.stringify({ error: 'Missing flowId' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Extract workflow data - the flow data is typically in the workflow JSON
-    const flowData: Record<string, unknown> = {
-      name: workflow.name || 'Imported Workflow',
-      description: workflow.description || 'Imported from Langflow Generator',
-      data: workflow.data || workflow,
-      is_component: false,
-      webhook: false,
-    };
+    console.log(`Fetching flow from Langflow: ${flowId}`);
 
-    // Add folder_id if provided for user workspace isolation
-    if (folderId) {
-      flowData.folder_id = folderId;
-      console.log(`Creating flow in folder: ${folderId}`);
-    }
-
-    console.log(`Importing workflow to Langflow: ${flowData.name}`);
-
-    // Call Langflow API to create the flow
-    const response = await fetch(`${targetUrl}/api/v1/flows/`, {
-      method: 'POST',
+    // Fetch the latest flow data from Langflow
+    const response = await fetch(`${LANGFLOW_URL}/api/v1/flows/${flowId}`, {
+      method: 'GET',
       headers: {
         'accept': 'application/json',
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(flowData),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Langflow API error:', errorText);
+      
+      if (response.status === 404) {
+        return new Response(
+          JSON.stringify({ error: 'Flow not found in Langflow' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: `Langflow API error: ${response.status}`, details: errorText }),
         { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const result = await response.json();
+    const flowData = await response.json();
     
-    console.log(`Successfully created flow with ID: ${result.id}`);
-    
+    console.log(`Successfully fetched flow: ${flowData.name}`);
+
     return new Response(
       JSON.stringify({ 
         success: true, 
-        flowId: result.id,
-        flowUrl: `${targetUrl}/flow/${result.id}`
+        workflow: {
+          name: flowData.name,
+          description: flowData.description,
+          data: flowData.data,
+          updated_at: flowData.updated_at,
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error importing to Langflow:', error);
+    console.error('Error syncing from Langflow:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),

@@ -2,9 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useLangflowSync } from '@/hooks/useLangflowSync';
 import type { Json } from '@/integrations/supabase/types';
-
-const BUILDER_URL = 'http://143.110.254.19:7860';
 
 interface WorkflowExplanation {
   overview: string;
@@ -24,6 +23,7 @@ export interface SavedWorkflow {
   description: string | null;
   workflow_json: object;
   explanation: WorkflowExplanation | null;
+  langflow_flow_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -31,8 +31,33 @@ export interface SavedWorkflow {
 export function useWorkflows() {
   const [workflows, setWorkflows] = useState<SavedWorkflow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [userFolderId, setUserFolderId] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const { provisionFolder, importToLangflow, syncFromLangflow, getUserFolderId } = useLangflowSync();
+
+  // Provision folder on login/mount
+  useEffect(() => {
+    const initializeUserFolder = async () => {
+      if (!user) return;
+      
+      // First check if user already has a folder
+      const existingFolderId = await getUserFolderId(user.id);
+      if (existingFolderId) {
+        setUserFolderId(existingFolderId);
+        return;
+      }
+      
+      // If not, provision one
+      const username = user.user_metadata?.username;
+      const folderId = await provisionFolder(user.id, username);
+      if (folderId) {
+        setUserFolderId(folderId);
+      }
+    };
+
+    initializeUserFolder();
+  }, [user, provisionFolder, getUserFolderId]);
 
   const fetchWorkflows = useCallback(async () => {
     if (!user) return;
@@ -52,6 +77,7 @@ export function useWorkflows() {
         description: item.description,
         workflow_json: item.workflow_json as unknown as object,
         explanation: item.explanation as unknown as WorkflowExplanation | null,
+        langflow_flow_id: item.langflow_flow_id,
         created_at: item.created_at,
         updated_at: item.updated_at,
       }));
@@ -73,7 +99,8 @@ export function useWorkflows() {
     name: string,
     description: string,
     workflowJson: object,
-    explanation?: WorkflowExplanation | null
+    explanation?: WorkflowExplanation | null,
+    langflowFlowId?: string | null
   ): Promise<SavedWorkflow | null> => {
     if (!user) return null;
 
@@ -86,6 +113,7 @@ export function useWorkflows() {
           description,
           workflow_json: workflowJson as unknown as Json,
           explanation: explanation as unknown as Json,
+          langflow_flow_id: langflowFlowId || null,
         })
         .select()
         .single();
@@ -98,6 +126,7 @@ export function useWorkflows() {
         description: data.description,
         workflow_json: data.workflow_json as unknown as object,
         explanation: data.explanation as unknown as WorkflowExplanation | null,
+        langflow_flow_id: data.langflow_flow_id,
         created_at: data.created_at,
         updated_at: data.updated_at,
       };
@@ -120,6 +149,49 @@ export function useWorkflows() {
       return null;
     }
   }, [user, toast]);
+
+  const updateWorkflow = useCallback(async (
+    id: string,
+    updates: {
+      name?: string;
+      description?: string;
+      workflow_json?: object;
+      explanation?: WorkflowExplanation | null;
+      langflow_flow_id?: string | null;
+    }
+  ): Promise<boolean> => {
+    try {
+      const updateData: Record<string, unknown> = {};
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.workflow_json !== undefined) updateData.workflow_json = updates.workflow_json as unknown as Json;
+      if (updates.explanation !== undefined) updateData.explanation = updates.explanation as unknown as Json;
+      if (updates.langflow_flow_id !== undefined) updateData.langflow_flow_id = updates.langflow_flow_id;
+
+      const { error } = await supabase
+        .from('workflows')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setWorkflows(prev => prev.map(w => 
+        w.id === id 
+          ? { ...w, ...updates, updated_at: new Date().toISOString() } 
+          : w
+      ));
+
+      return true;
+    } catch (error) {
+      console.error('Error updating workflow:', error);
+      toast({
+        title: 'Error updating workflow',
+        description: 'Failed to update the workflow',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [toast]);
 
   const deleteWorkflow = useCallback(async (id: string) => {
     try {
@@ -146,46 +218,30 @@ export function useWorkflows() {
     }
   }, [toast]);
 
-  const importToLangflow = useCallback(async (workflowJson: object): Promise<string | null> => {
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-to-langflow`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            workflow: workflowJson,
-            langflowUrl: BUILDER_URL,
-          }),
-        }
-      );
+  const importWorkflowToLangflow = useCallback(async (workflowJson: object): Promise<{ flowUrl: string; flowId: string } | null> => {
+    return importToLangflow(workflowJson, userFolderId);
+  }, [importToLangflow, userFolderId]);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to import workflow');
-      }
+  const syncWorkflowFromLangflow = useCallback(async (workflowId: string, langflowFlowId: string): Promise<boolean> => {
+    const syncResult = await syncFromLangflow(langflowFlowId);
+    
+    if (!syncResult) return false;
 
-      const data = await response.json();
-      
-      if (data.success && data.flowUrl) {
-        return data.flowUrl;
-      }
-      
-      throw new Error('Import succeeded but no flow URL returned');
-    } catch (error) {
-      console.error('Error importing workflow:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const success = await updateWorkflow(workflowId, {
+      name: syncResult.name,
+      description: syncResult.description,
+      workflow_json: syncResult.data,
+    });
+
+    if (success) {
       toast({
-        title: 'Import failed',
-        description: errorMessage,
-        variant: 'destructive',
+        title: 'Workflow synced!',
+        description: 'Latest changes from the builder have been saved',
       });
-      return null;
     }
-  }, [toast]);
+
+    return success;
+  }, [syncFromLangflow, updateWorkflow, toast]);
 
   useEffect(() => {
     fetchWorkflows();
@@ -194,9 +250,12 @@ export function useWorkflows() {
   return {
     workflows,
     isLoading,
+    userFolderId,
     saveWorkflow,
+    updateWorkflow,
     deleteWorkflow,
-    importToLangflow,
+    importToLangflow: importWorkflowToLangflow,
+    syncFromLangflow: syncWorkflowFromLangflow,
     refreshWorkflows: fetchWorkflows,
   };
 }
