@@ -30,7 +30,8 @@ interface WorkflowsViewProps {
   workflows: SavedWorkflow[];
   isLoading: boolean;
   onDelete: (id: string) => void;
-  onImportToBuilder: (workflowJson: object) => Promise<{ flowUrl: string; flowId: string } | null>;
+  onOpenInBuilder: (workflow: SavedWorkflow) => void;
+  onOpenWorkspace: () => void;
   onSyncFromBuilder: (workflowId: string, langflowFlowId: string) => Promise<boolean>;
   onCreateNew: () => void;
   onUseTemplate: (prompt: string) => void;
@@ -71,7 +72,8 @@ export function WorkflowsView({
   workflows, 
   isLoading, 
   onDelete, 
-  onImportToBuilder,
+  onOpenInBuilder,
+  onOpenWorkspace,
   onSyncFromBuilder,
   onCreateNew,
   onUseTemplate
@@ -79,7 +81,6 @@ export function WorkflowsView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkflow, setSelectedWorkflow] = useState<SavedWorkflow | null>(null);
   const [workflowToDelete, setWorkflowToDelete] = useState<SavedWorkflow | null>(null);
-  const [importingId, setImportingId] = useState<string | null>(null);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -87,22 +88,6 @@ export function WorkflowsView({
     w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     w.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const handleOpenInBuilder = async (workflow: SavedWorkflow) => {
-    setImportingId(workflow.id);
-    try {
-      const result = await onImportToBuilder(workflow.workflow_json);
-      if (result) {
-        window.open(result.flowUrl, '_blank');
-        toast({
-          title: 'Workflow opened!',
-          description: 'Opening in visual builder...',
-        });
-      }
-    } finally {
-      setImportingId(null);
-    }
-  };
 
   const handleSyncFromBuilder = async (workflow: SavedWorkflow) => {
     if (!workflow.langflow_flow_id) {
@@ -171,6 +156,9 @@ export function WorkflowsView({
                   className="pl-10 bg-card border-border"
                 />
               </div>
+              <Button variant="outline" onClick={onOpenWorkspace} className="gap-2">
+                Open Workspace
+              </Button>
               <Button onClick={onCreateNew} className="gap-2">
                 <Plus className="w-4 h-4" />
                 Create Workflow
@@ -209,10 +197,9 @@ export function WorkflowsView({
                       createdAt={workflow.created_at}
                       langflowFlowId={workflow.langflow_flow_id}
                       onView={() => setSelectedWorkflow(workflow)}
-                      onOpen={() => handleOpenInBuilder(workflow)}
+                      onOpen={() => onOpenInBuilder(workflow)}
                       onSync={() => handleSyncFromBuilder(workflow)}
                       onDelete={() => setWorkflowToDelete(workflow)}
-                      isImporting={importingId === workflow.id}
                       isSyncing={syncingId === workflow.id}
                     />
                   ))}
@@ -257,7 +244,7 @@ export function WorkflowsView({
             <Button
               onClick={() => {
                 if (selectedWorkflow) {
-                  handleOpenInBuilder(selectedWorkflow);
+                  onOpenInBuilder(selectedWorkflow);
                 }
               }}
               className="gap-2"

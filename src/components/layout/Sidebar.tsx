@@ -14,8 +14,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
-  activeView: 'home' | 'workflows' | 'create';
-  onViewChange: (view: 'home' | 'workflows' | 'create') => void;
+  activeView: 'home' | 'workflows' | 'create' | 'builder';
+  onViewChange: (view: 'home' | 'workflows' | 'create' | 'builder') => void;
   onSignOut: () => void;
   userEmail?: string;
 }

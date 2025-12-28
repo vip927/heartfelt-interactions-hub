@@ -20,7 +20,6 @@ interface WorkflowCardProps {
   onOpen: () => void;
   onSync?: () => void;
   onDelete: () => void;
-  isImporting?: boolean;
   isSyncing?: boolean;
 }
 
@@ -42,7 +41,6 @@ export function WorkflowCard({
   onOpen,
   onSync,
   onDelete,
-  isImporting,
   isSyncing,
 }: WorkflowCardProps) {
   // Generate consistent color based on id
@@ -91,12 +89,8 @@ export function WorkflowCard({
                     <Eye className="w-4 h-4 mr-2" />
                     View Details
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={onOpen} disabled={isImporting}>
-                    {isImporting ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                    )}
+                  <DropdownMenuItem onClick={onOpen}>
+                    <ExternalLink className="w-4 h-4 mr-2" />
                     Open in Builder
                   </DropdownMenuItem>
                   {langflowFlowId && onSync && (
