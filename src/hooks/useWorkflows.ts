@@ -36,7 +36,7 @@ export function useWorkflows() {
   const { toast } = useToast();
   const { provisionFolder, importToLangflow, syncFromLangflow, getUserFolderId } = useLangflowSync();
 
-  // Provision folder on login/mount
+  // Provision folder on login/mount (non-blocking - builder works without it)
   useEffect(() => {
     const initializeUserFolder = async () => {
       if (!user) return;
@@ -48,11 +48,16 @@ export function useWorkflows() {
         return;
       }
       
-      // If not, provision one
-      const username = user.user_metadata?.username;
-      const folderId = await provisionFolder(user.id, username);
-      if (folderId) {
-        setUserFolderId(folderId);
+      // Try to provision one, but don't block if it fails
+      try {
+        const username = user.user_metadata?.username;
+        const folderId = await provisionFolder(user.id, username);
+        if (folderId) {
+          setUserFolderId(folderId);
+        }
+      } catch (error) {
+        // Folder provisioning failed - builder will still work without folder isolation
+        console.warn('Folder provisioning failed, continuing without folder isolation:', error);
       }
     };
 
