@@ -24,7 +24,7 @@ export function EmbeddedBuilder({
 
   // Construct the URL to show
   // If we have a specific flowUrl, use that
-  // Otherwise, show the folder view for the user's workspace
+  // Otherwise, show the main Langflow view
   const getBuilderUrl = () => {
     if (flowUrl) {
       return flowUrl;
@@ -32,10 +32,8 @@ export function EmbeddedBuilder({
     if (flowId) {
       return `${BUILDER_URL}/flow/${flowId}`;
     }
-    if (folderId) {
-      return `${BUILDER_URL}/all?folder_id=${folderId}`;
-    }
-    return `${BUILDER_URL}/all`;
+    // Show all flows - folder filtering not supported by this Langflow instance
+    return BUILDER_URL;
   };
 
   const handleRefresh = () => {
