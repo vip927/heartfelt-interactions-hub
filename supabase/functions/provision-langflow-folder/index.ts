@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const LANGFLOW_URL = Deno.env.get('LANGFLOW_URL') || 'http://143.110.254.19:7860';
+const LANGFLOW_API_KEY = Deno.env.get('LANGFLOW_API_KEY');
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -71,12 +72,18 @@ serve(async (req) => {
     
     console.log(`Creating new Langflow folder: ${folderName}`);
 
+    const headers: Record<string, string> = {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+    
+    if (LANGFLOW_API_KEY) {
+      headers['x-api-key'] = LANGFLOW_API_KEY;
+    }
+
     const createFolderResponse = await fetch(`${LANGFLOW_URL}/api/v1/folders/`, {
       method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         name: folderName,
         description: `Workspace for ${folderName}`,
