@@ -5,16 +5,17 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { TopBar } from '@/components/layout/TopBar';
 import { WorkflowsView } from '@/components/views/WorkflowsView';
 import { CreateView } from '@/components/views/CreateView';
+import { BuilderView } from '@/components/views/BuilderView';
 import { useWorkflowGenerator } from '@/hooks/useWorkflowGenerator';
-import { useWorkflows } from '@/hooks/useWorkflows';
+import { useWorkflows, SavedWorkflow } from '@/hooks/useWorkflows';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
-type ViewType = 'home' | 'workflows' | 'create';
+type ViewType = 'home' | 'workflows' | 'create' | 'builder';
 
 const Index = () => {
   const { messages, isLoading, workflowState, sendMessage, clearChat } = useWorkflowGenerator();
-  const { workflows, isLoading: isLoadingWorkflows, saveWorkflow, deleteWorkflow, importToLangflow, syncFromLangflow, refreshWorkflows } = useWorkflows();
+  const { workflows, isLoading: isLoadingWorkflows, userFolderId, saveWorkflow, deleteWorkflow, importToLangflow, syncFromLangflow, refreshWorkflows } = useWorkflows();
   const { user, loading, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -22,6 +23,8 @@ const Index = () => {
   const [isDark, setIsDark] = useState(false);
   const [activeView, setActiveView] = useState<ViewType>('workflows');
   const [templatePrompt, setTemplatePrompt] = useState<string | undefined>();
+  const [activeBuilderWorkflow, setActiveBuilderWorkflow] = useState<SavedWorkflow | null>(null);
+  const [activeBuilderFlowUrl, setActiveBuilderFlowUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Check system preference
@@ -39,14 +42,11 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  // Auto-save workflow when generated and import to builder
+  // Auto-save workflow when generated and open embedded builder
   useEffect(() => {
     if (workflowState.workflow && workflowState.isValid) {
       const workflowName = (workflowState.workflow as any).name || 'Untitled Workflow';
       const description = workflowState.explanation?.overview || '';
-      
-      // Open builder window immediately (prevents popup blocker)
-      const builderWindow = window.open('about:blank', '_blank');
       
       // Save workflow and import to builder
       saveWorkflow(workflowName, description, workflowState.workflow, workflowState.explanation)
@@ -55,23 +55,20 @@ const Index = () => {
             // Import and get the flow URL and ID
             const result = await importToLangflow(workflowState.workflow!);
             
-            if (result && builderWindow) {
-              // Navigate to the imported flow
-              builderWindow.location.href = result.flowUrl;
+            if (result) {
+              // Open embedded builder with the imported flow
+              setActiveBuilderWorkflow(saved);
+              setActiveBuilderFlowUrl(result.flowUrl);
+              setActiveView('builder');
               
               toast({
                 title: 'Workflow created!',
                 description: 'Opening in visual builder...',
               });
-            } else if (builderWindow) {
-              // Fallback: close the blank window if import failed
-              builderWindow.close();
             }
             
             // Refresh workflows list
             refreshWorkflows();
-          } else if (builderWindow) {
-            builderWindow.close();
           }
         });
     }
@@ -104,6 +101,10 @@ const Index = () => {
       clearChat();
       setTemplatePrompt(undefined);
     }
+    if (view !== 'builder') {
+      setActiveBuilderWorkflow(null);
+      setActiveBuilderFlowUrl(null);
+    }
     setActiveView(view);
   };
 
@@ -117,6 +118,31 @@ const Index = () => {
     clearChat();
     setTemplatePrompt(prompt);
     setActiveView('create');
+  };
+
+  const handleOpenInBuilder = async (workflow: SavedWorkflow) => {
+    // Import the workflow to Langflow first if needed
+    const result = await importToLangflow(workflow.workflow_json);
+    
+    if (result) {
+      setActiveBuilderWorkflow(workflow);
+      setActiveBuilderFlowUrl(result.flowUrl);
+      setActiveView('builder');
+    }
+  };
+
+  const handleOpenWorkspace = () => {
+    // Open the user's workspace (all flows in their folder)
+    setActiveBuilderWorkflow(null);
+    setActiveBuilderFlowUrl(null);
+    setActiveView('builder');
+  };
+
+  const handleCloseBuilder = () => {
+    setActiveBuilderWorkflow(null);
+    setActiveBuilderFlowUrl(null);
+    setActiveView('workflows');
+    refreshWorkflows(); // Refresh to get any updates from builder
   };
 
   if (loading) {
@@ -160,12 +186,21 @@ const Index = () => {
               onBack={() => setActiveView('workflows')}
               initialPrompt={templatePrompt}
             />
+          ) : activeView === 'builder' ? (
+            <BuilderView
+              userFolderId={userFolderId}
+              workflow={activeBuilderWorkflow}
+              flowUrl={activeBuilderFlowUrl}
+              onClose={handleCloseBuilder}
+              onSync={syncFromLangflow}
+            />
           ) : (
             <WorkflowsView
               workflows={workflows}
               isLoading={isLoadingWorkflows}
               onDelete={deleteWorkflow}
-              onImportToBuilder={importToLangflow}
+              onOpenInBuilder={handleOpenInBuilder}
+              onOpenWorkspace={handleOpenWorkspace}
               onSyncFromBuilder={syncFromLangflow}
               onCreateNew={handleCreateNew}
               onUseTemplate={handleUseTemplate}
